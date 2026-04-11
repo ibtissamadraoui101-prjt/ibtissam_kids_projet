@@ -1,0 +1,47 @@
+name: linguakids_maroc
+description: Application Flutter pour apprendre le français aux élèves du primaire marocain, avec jeu Memory et reconnaissance vocale.
+
+publish_to: "none"
+
+version: 1.0.0+1
+
+environment:
+  sdk: ">=3.0.0 <4.0.0"
+
+dependencies:
+  flutter:
+    sdk: flutter
+
+  # Package pour la reconnaissance vocale
+  speech_to_text: ^6.6.0
+
+  # Package pour la synthèse vocale (TTS) - optionnel pour lire les mots
+  flutter_tts: ^4.2.5
+
+  # Package pour gérer les autorisations (microphone)
+  permission_handler: ^12.0.1
+
+  # UI/Material
+  cupertino_icons: ^1.0.2
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+
+  flutter_lints: ^3.0.0
+
+flutter:
+  uses-material-design: true
+
+  # Assets - images
+  assets:
+    - assets/images/chat.png
+    - assets/images/chien.png
+    - assets/images/pomme.png
+    - assets/images/voiture.png
+    - assets/images/ecole.png
+    - assets/images/papa.png
+    # Audiofiles - si vous avez des fichiers MP3
+    # - assets/audios/chat.mp3
+    # - assets/audios/chien.mp3
+    # etc.
