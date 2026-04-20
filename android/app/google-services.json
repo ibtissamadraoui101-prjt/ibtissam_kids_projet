@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "1051481715519",
+    "project_id": "projetibtissam-2908o",
+    "storage_bucket": "projetibtissam-2908o.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:1051481715519:android:e1d713603e2c494e73598a",
+        "android_client_info": {
+          "package_name": "com.example.linguakids_maroc"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyD38OYB7LOPhKiTH2MBS0eVk2CKV0Y63uw"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

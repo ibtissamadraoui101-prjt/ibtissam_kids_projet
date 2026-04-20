@@ -1,568 +1,812 @@
+// lib/screens/memory_game_screen.
+import '../services/progress_service.dart';
 import 'package:flutter/material.dart';
 import 'package:speech_to_text/speech_to_text.dart' as stt;
+import 'package:flutter_tts/flutter_tts.dart';
 import 'dart:async';
-import '../models/word_model.dart';
-import '../data/mots_cp.dart';
+import '../models/game_models.dart';
+import '../services/tts_service.dart';
+import '../services/progress_service.dart';
+import '../services/adaptive_engine.dart';
 
 class GameCard {
   final Word word;
   bool isFlipped;
   bool isMatched;
-  int repetitionsSuccess;
-
-  GameCard({
-    required this.word,
-    this.isFlipped = false,
-    this.isMatched = false,
-    this.repetitionsSuccess = 0,
-  });
+  GameCard({required this.word, this.isFlipped = false, this.isMatched = false});
 }
 
+// ══════════════════════════════════════════════════════════════════════════════
 class MemoryGameScreen extends StatefulWidget {
-  final String niveau;
-  const MemoryGameScreen({super.key, required this.niveau});
-
-  @override
-  State<MemoryGameScreen> createState() => _MemoryGameScreenState();
+  final GameLevelData levelData;
+  const MemoryGameScreen({super.key, required this.levelData});
+  @override State<MemoryGameScreen> createState() => _MemoryGameScreenState();
 }
 
 class _MemoryGameScreenState extends State<MemoryGameScreen> {
   late List<GameCard> cards;
+  int score = 0, moves = 0;
+  GameCard? first, second;
+  bool checking = false;
   late stt.SpeechToText _speechToText;
-  late List<Word> allWords;
-  int score = 0;
-  int moves = 0;
-  GameCard? firstCard;
-  GameCard? secondCard;
-  bool isCheckingMatch = false;
-  bool isSpeechInitialized = false;
-
-  final List<String> encouragementMessages = [
-    'Bravo !', 'Excellent !', 'Très bien !', 'Parfait !', 'Magnifique !', 'Super !',
-  ];
-
-  final List<String> finalEncouragementMessages = [
-    'Tu as réussi ! La paire est gagnée !',
-    'Bravo, tu maîtrises ce mot !',
-    'Excellent travail !',
-    'Tu progresses très bien !',
-  ];
+  bool sttReady = false;
+  final _tts = TtsService();
 
   @override
   void initState() {
     super.initState();
-    allWords = getMotsCP();
-    _initializeGame();
+    _build();
     _speechToText = stt.SpeechToText();
-    _initializeSpeech();
+    _initStt();
   }
 
-  void _initializeGame() {
-    List<GameCard> tempCards = [];
-    for (Word word in allWords) {
-      tempCards.add(GameCard(word: word));
-      tempCards.add(GameCard(word: word));
-    }
-    tempCards.shuffle();
-    cards = tempCards;
+  void _build() {
+    final words = widget.levelData.vocabulary.take(6).toList();
+    final temp = [...words.map((w) => GameCard(word: w)), ...words.map((w) => GameCard(word: w))];
+    temp.shuffle();
+    cards = temp;
   }
 
-  Future<void> _initializeSpeech() async {
+  Future<void> _initStt() async {
     try {
-      bool available = await _speechToText.initialize(
-        onError: (error) => print('Erreur speech: $error'),
-        onStatus: (status) => print('Statut: $status'),
+      final ok = await _speechToText.initialize(
+        onError: (e) => debugPrint('STT: $e'),
+        onStatus: (s) => debugPrint('STT: $s'),
       );
-      if (available && mounted) {
-        setState(() => isSpeechInitialized = true);
-        print('✅ Reconnaissance vocale disponible');
-      } else if (mounted) {
-        _showErrorDialog(
-          'Microphone non disponible',
-          'La reconnaissance vocale n\'est pas disponible sur cet appareil.',
-        );
-      }
-    } catch (e) {
-      print('Erreur initialisation: $e');
-      if (mounted) {
-        _showErrorDialog('Erreur', 'Impossible d\'initialiser le microphone.');
-      }
-    }
+      if (mounted) setState(() => sttReady = ok);
+    } catch (_) {}
   }
 
   @override
   void dispose() {
     _speechToText.stop();
+    _tts.stop();
     super.dispose();
   }
 
-  void _onCardTapped(int index) {
-    if (isCheckingMatch || cards[index].isMatched || cards[index].isFlipped) return;
-
-    setState(() => cards[index].isFlipped = true);
-
-    if (firstCard == null) {
-      firstCard = cards[index];
-    } else if (secondCard == null && cards[index] != firstCard) {
-      secondCard = cards[index];
-      isCheckingMatch = true;
+  void _onTap(int i) {
+    if (checking || cards[i].isMatched || cards[i].isFlipped) return;
+    setState(() => cards[i].isFlipped = true);
+    if (first == null) {
+      first = cards[i];
+    } else if (cards[i] != first) {
+      second = cards[i];
+      checking = true;
       moves++;
-      Future.delayed(const Duration(milliseconds: 500), () => _checkMatch());
+      Future.delayed(const Duration(milliseconds: 600), _check);
     }
   }
 
-  void _checkMatch() {
-    if (firstCard == null || secondCard == null) return;
-    if (firstCard!.word.id == secondCard!.word.id) {
-      _showMatchDialog(firstCard!.word);
+  void _check() {
+    if (first!.word.id == second!.word.id) {
+      _tts.speak(first!.word.word);
+      _showMatch(first!.word);
     } else {
       setState(() {
-        cards[cards.indexOf(firstCard!)].isFlipped = false;
-        cards[cards.indexOf(secondCard!)].isFlipped = false;
-        firstCard = null;
-        secondCard = null;
-        isCheckingMatch = false;
+        cards[cards.indexOf(first!)].isFlipped = false;
+        cards[cards.indexOf(second!)].isFlipped = false;
+        first = null;
+        second = null;
+        checking = false;
       });
     }
   }
 
-  void _showMatchDialog(Word word) {
+  void _showMatch(Word word) {
     showDialog(
       context: context,
       barrierDismissible: false,
-      builder: (context) => AlertDialog(
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+      builder: (_) => _MatchDialog(
+        word: word,
+        tts: _tts,
+        onStart: () {
+          Navigator.pop(_);
+          _rep(word, 1);
+        },
+      ),
+    );
+  }
+
+  void _rep(Word word, int n) {
+    if (n > 3) {
+      _success(word);
+      return;
+    }
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (ctx) => _RepDialog(
+        word: word,
+        repetitionNumber: n,
+        speechToText: _speechToText,
+        flutterTts: _tts.raw,
+        sttReady: sttReady,
+        ttsAvail: _tts.isAvailable,
+        onSuccess: () {
+          Navigator.pop(ctx);
+          _rep(word, n + 1);
+        },
+        onRetry: () {
+          Navigator.pop(ctx);
+          _rep(word, n);
+        },
+      ),
+    );
+  }
+
+  void _success(Word word) {
+    final msgs = ['🎉 Paire gagnée !', '🌟 Bravo, continue !', '💪 Excellent travail !'];
+    final msg = msgs[DateTime.now().millisecond % msgs.length];
+    _tts.speak(msg);
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (_) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
         backgroundColor: Colors.green[50],
-        title: Row(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            const Icon(Icons.star, color: Colors.amber, size: 28),
-            const SizedBox(width: 8),
-            Text('Bravo !', style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold, color: Colors.green[700])),
-          ],
-        ),
         content: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Container(
-              width: 100,
-              height: 100,
-              decoration: BoxDecoration(
-                borderRadius: BorderRadius.circular(12),
-                border: Border.all(color: Colors.green[300]!, width: 2),
-              ),
-              child: Image.asset(word.imagePath, fit: BoxFit.cover),
-            ),
-            const SizedBox(height: 16),
-            Text('C\'est un ${word.mot}', style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
-            const SizedBox(height: 12),
-            Container(
-              padding: const EdgeInsets.all(12),
-              decoration: BoxDecoration(color: Colors.blue[100], borderRadius: BorderRadius.circular(8)),
-              child: Column(
-                children: [
-                  const Text('En arabe :', style: TextStyle(fontSize: 14, color: Colors.grey)),
-                  const SizedBox(height: 4),
-                  Text(word.traductionArabe, style: const TextStyle(fontSize: 22, fontWeight: FontWeight.bold, color: Colors.blue)),
-                ],
-              ),
-            ),
-            const SizedBox(height: 20),
-            const Text('Maintenant, répète le mot 3 fois pour valider !',
-                style: TextStyle(fontSize: 14, color: Colors.grey, fontStyle: FontStyle.italic)),
+            const Text('🎉', style: TextStyle(fontSize: 52)),
+            const SizedBox(height: 8),
+            Text(msg, textAlign: TextAlign.center,
+                style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+            const SizedBox(height: 6),
+            Text('✅  ${word.word}  —  ${word.traductionArabic ?? word.traductionDarija ?? ""}',
+                textAlign: TextAlign.center, style: const TextStyle(color: Colors.grey)),
           ],
         ),
         actions: [
-          ElevatedButton(
-            onPressed: () {
-              Navigator.pop(context);
-              _startVoiceValidation(word);
-            },
-            style: ElevatedButton.styleFrom(backgroundColor: Colors.green[600]),
-            child: const Text('Commencer la répétition', style: TextStyle(color: Colors.white)),
-          ),
+          SizedBox(
+            width: double.infinity,
+            child: ElevatedButton(
+              onPressed: () {
+                Navigator.pop(_);
+                _mark(word);
+              },
+              style: ElevatedButton.styleFrom(backgroundColor: Colors.green[600]),
+              child: const Text('Continuer →', style: TextStyle(color: Colors.white, fontSize: 16)),
+            ),
+          )
         ],
       ),
     );
   }
 
-  Future<void> _startVoiceValidation(Word word) async {
-    if (!isSpeechInitialized) {
-      _showErrorDialog('Erreur', 'Microphone non disponible');
-      return;
-    }
-    _showRepetitionDialog(word, 1);
-  }
-
-  void _showRepetitionDialog(Word word, int repetitionNumber) {
-    if (repetitionNumber > 3) {
-      _completeWordValidation(word);
-      return;
-    }
-
-    showDialog(
-      context: context,
-      barrierDismissible: false,
-      builder: (dialogContext) => _RepetitionDialog(
-        word: word,
-        repetitionNumber: repetitionNumber,
-        speechToText: _speechToText,
-        isSpeechInitialized: isSpeechInitialized,
-        onSuccess: () {
-          Navigator.pop(dialogContext);
-          _showRepetitionDialog(word, repetitionNumber + 1);
-        },
-        onRetry: () {
-          Navigator.pop(dialogContext);
-          _showRepetitionDialog(word, repetitionNumber);
-        },
-        onError: (message) {
-          Navigator.pop(dialogContext);
-          _showErrorDialog('Erreur', message);
-        },
-      ),
-    );
-  }
-
-  void _completeWordValidation(Word word) {
-    showDialog(
-      context: context,
-      barrierDismissible: false,
-      builder: (context) => AlertDialog(
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-        backgroundColor: Colors.green[100],
-        title: Row(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            Icon(Icons.check_circle, color: Colors.green[700], size: 32),
-            const SizedBox(width: 8),
-            Text('Paire validée !', style: TextStyle(fontSize: 22, fontWeight: FontWeight.bold, color: Colors.green[700])),
-          ],
-        ),
-        content: Text(
-          '${finalEncouragementMessages[DateTime.now().millisecond % finalEncouragementMessages.length]}\n\nTu as maîtrisé : ${word.mot} (${word.traductionArabe})',
-          textAlign: TextAlign.center,
-        ),
-        actions: [
-          ElevatedButton(
-            onPressed: () {
-              Navigator.pop(context);
-              _markCardAsMatched(word);
-            },
-            style: ElevatedButton.styleFrom(backgroundColor: Colors.green[600]),
-            child: const Text('Continuer', style: TextStyle(color: Colors.white)),
-          ),
-        ],
-      ),
-    );
-  }
-
-  void _markCardAsMatched(Word word) {
+  void _mark(Word word) {
     setState(() {
-      for (var card in cards) {
-        if (card.word.id == word.id) {
-          card.isMatched = true;
-          card.isFlipped = false;
-          card.repetitionsSuccess = 3;
+      for (var c in cards) {
+        if (c.word.id == word.id) {
+          c.isMatched = true;
+          c.isFlipped = false;
         }
       }
       score++;
-      firstCard = null;
-      secondCard = null;
-      isCheckingMatch = false;
+      first = null;
+      second = null;
+      checking = false;
     });
-    if (cards.every((card) => card.isMatched)) _showGameOverDialog();
+    if (cards.every((c) => c.isMatched)) {
+      Future.delayed(const Duration(milliseconds: 400), _end);
+    }
   }
 
-  void _showGameOverDialog() {
+  void _end() {
+
+  // ── AJOUTER CES LIGNES ──────────────────────────
+  ProgressService().recordScore(
+    levelId: widget.levelData.id,
+    gameType: 'memory',
+    score: score,           // nombre de paires trouvées
+    maxScore: cards.length ~/ 2,
+  );
+     _tts.speak(AdaptiveEngine().encouragementMessage(
+    score * 100 ~/ (cards.length ~/ 2),
+  ));
     showDialog(
       context: context,
       barrierDismissible: false,
-      builder: (context) => AlertDialog(
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+      builder: (_) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
         backgroundColor: Colors.amber[50],
-        title: Row(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            Icon(Icons.celebration, color: Colors.amber[700], size: 32),
-            const SizedBox(width: 8),
-            Text('Félicitations !', style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold, color: Colors.amber[700])),
-          ],
-        ),
         content: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            const Text('Tu as terminé le jeu !', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+            const Text('🏆', style: TextStyle(fontSize: 56)),
             const SizedBox(height: 12),
-            Text('Points : $score', style: const TextStyle(fontSize: 16)),
-            Text('Coups : $moves', style: const TextStyle(fontSize: 16)),
+            const Text('Félicitations !', style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold)),
+            const SizedBox(height: 8),
+            Row(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: List.generate(3, (_) => const Icon(Icons.star, color: Colors.amber, size: 36)),
+            ),
+            const SizedBox(height: 14),
+            Text('Paires : $score  •  Coups : $moves',
+                style: const TextStyle(fontSize: 15, color: Colors.grey)),
           ],
         ),
         actions: [
-          ElevatedButton(
-            onPressed: () => Navigator.popUntil(context, (route) => route.isFirst),
-            style: ElevatedButton.styleFrom(backgroundColor: Colors.amber[700]),
-            child: const Text('Retour', style: TextStyle(color: Colors.white)),
-          ),
+          SizedBox(
+            width: double.infinity,
+            child: ElevatedButton(
+              onPressed: () => Navigator.popUntil(context, (r) => r.isFirst),
+              style: ElevatedButton.styleFrom(backgroundColor: Colors.amber[700]),
+              child: const Text('Retour', style: TextStyle(color: Colors.white, fontSize: 16)),
+            ),
+          )
         ],
-      ),
-    );
-  }
-
-  void _showErrorDialog(String title, String message) {
-    showDialog(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: Text(title),
-        content: Text(message),
-        actions: [TextButton(onPressed: () => Navigator.pop(context), child: const Text('OK'))],
       ),
     );
   }
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(
-        title: Text('Memory - ${widget.niveau}'),
-        backgroundColor: Colors.blue[600],
-        actions: [
-          Padding(
-            padding: const EdgeInsets.only(right: 16),
-            child: Center(child: Text('Points: $score   Coups: $moves')),
-          ),
-        ],
-      ),
-      body: GridView.builder(
-        padding: const EdgeInsets.all(16),
-        gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-          crossAxisCount: 3,
-          mainAxisSpacing: 16,
-          crossAxisSpacing: 16,
+    final total = cards.length ~/ 2;
+    return WillPopScope(
+      onWillPop: () async => await showDialog<bool>(
+            context: context,
+            builder: (_) => AlertDialog(
+              title: const Text('Quitter ?'),
+              actions: [
+                TextButton(onPressed: () => Navigator.pop(context, false), child: const Text('Continuer')),
+                TextButton(onPressed: () => Navigator.pop(context, true), child: const Text('Quitter')),
+              ],
+            ),
+          ) ??
+          false,
+      child: Scaffold(
+        appBar: AppBar(
+          title: Text('Memory — ${widget.levelData.title}', style: const TextStyle(fontWeight: FontWeight.bold)),
+          backgroundColor: const Color(0xFF1565C0),
+          foregroundColor: Colors.white,
+          elevation: 0,
+          actions: [
+            Padding(
+              padding: const EdgeInsets.only(right: 16),
+              child: Center(child: Text('$score/$total  •  $moves coups', style: const TextStyle(fontWeight: FontWeight.bold))),
+            ),
+          ],
         ),
-        itemCount: cards.length,
-        itemBuilder: (context, index) => _buildCard(cards[index], index),
+        body: Column(
+          children: [
+            LinearProgressIndicator(
+              value: score / total,
+              minHeight: 6,
+              backgroundColor: Colors.blue[100],
+              valueColor: const AlwaysStoppedAnimation<Color>(Color(0xFF1565C0)),
+            ),
+            Expanded(
+              child: GridView.builder(
+                padding: const EdgeInsets.all(16),
+                gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+                    crossAxisCount: 3, mainAxisSpacing: 12, crossAxisSpacing: 12, childAspectRatio: 0.85),
+                itemCount: cards.length,
+                itemBuilder: (_, i) => _buildCard(cards[i], i),
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }
 
-  Widget _buildCard(GameCard card, int index) {
+  Widget _buildCard(GameCard card, int i) {
+    final show = card.isFlipped || card.isMatched;
     return GestureDetector(
-      onTap: () => _onCardTapped(index),
+      onTap: () => _onTap(i),
       child: AnimatedContainer(
         duration: const Duration(milliseconds: 300),
         decoration: BoxDecoration(
-          color: card.isMatched ? Colors.green[200] : (card.isFlipped ? Colors.blue[200] : Colors.grey[300]),
-          borderRadius: BorderRadius.circular(12),
-          border: Border.all(color: card.isMatched ? Colors.green[600]! : Colors.grey[400]!, width: 2),
+          color: card.isMatched
+              ? Colors.green[100]
+              : card.isFlipped
+                  ? Colors.blue[50]
+                  : Colors.grey[200],
+          borderRadius: BorderRadius.circular(14),
+          border: Border.all(
+            color: card.isMatched
+                ? Colors.green
+                : card.isFlipped
+                    ? const Color(0xFF1565C0)
+                    : Colors.grey[350]!,
+            width: 2.5,
+          ),
+          boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.08), blurRadius: 6, offset: const Offset(0, 3))],
         ),
-        child: AnimatedOpacity(
-          opacity: (card.isFlipped || card.isMatched) ? 1.0 : 0.0,
-          duration: const Duration(milliseconds: 300),
-          child: (card.isFlipped || card.isMatched)
-              ? ClipRRect(
-                  borderRadius: BorderRadius.circular(12),
-                  child: Image.asset(card.word.imagePath, fit: BoxFit.cover),
-                )
-              : Center(child: Icon(Icons.help_outline, size: 40, color: Colors.grey[600])),
-        ),
+        child: show
+            ? Stack(
+                children: [
+                  Center(child: Text(card.word.emoji, style: const TextStyle(fontSize: 48))),
+                  Positioned(
+                    bottom: 6,
+                    left: 0,
+                    right: 0,
+                    child: Text(
+                      card.word.word,
+                      textAlign: TextAlign.center,
+                      style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13, color: Colors.black87),
+                    ),
+                  ),
+                  if (card.isMatched)
+                    Positioned(
+                      top: 4,
+                      right: 4,
+                      child: Container(
+                        padding: const EdgeInsets.all(2),
+                        decoration: const BoxDecoration(color: Colors.green, shape: BoxShape.circle),
+                        child: const Icon(Icons.check, color: Colors.white, size: 14),
+                      ),
+                    ),
+                ],
+              )
+            : Center(child: Icon(Icons.help_outline, size: 40, color: Colors.grey[500])),
       ),
     );
   }
 }
 
-// ===================== DIALOGUE DE RÉPÉTITION INDÉPENDANT (CORRIGÉ) =====================
-class _RepetitionDialog extends StatefulWidget {
+// ══════════════════════════════════════════════════════════════════════════════
+class _MatchDialog extends StatelessWidget {
+  final Word word;
+  final TtsService tts;
+  final VoidCallback onStart;
+  const _MatchDialog({required this.word, required this.tts, required this.onStart});
+
+  @override
+  Widget build(BuildContext context) {
+    return AlertDialog(
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+      backgroundColor: Colors.green[50],
+      content: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          const Text('⭐', style: TextStyle(fontSize: 40)),
+          const Text('Bonne paire !', style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold, color: Colors.green)),
+          const SizedBox(height: 14),
+          Text(word.emoji, style: const TextStyle(fontSize: 72)),
+          const SizedBox(height: 6),
+          Text(word.word, style: const TextStyle(fontSize: 28, fontWeight: FontWeight.bold)),
+          const SizedBox(height: 6),
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+            decoration: BoxDecoration(color: Colors.blue[50], borderRadius: BorderRadius.circular(10)),
+            child: Text(
+              word.traductionArabic ?? word.traductionDarija ?? '',
+              style: const TextStyle(fontSize: 22, color: Colors.blue, fontWeight: FontWeight.bold),
+            ),
+          ),
+          const SizedBox(height: 10),
+          OutlinedButton.icon(
+            onPressed: () => tts.speak(word.word),
+            icon: const Icon(Icons.volume_up),
+            label: const Text('Écouter encore'),
+            style: OutlinedButton.styleFrom(foregroundColor: Colors.green[700]),
+          ),
+          const SizedBox(height: 6),
+          Text(
+            'Répète le mot 3 fois pour valider !',
+            textAlign: TextAlign.center,
+            style: TextStyle(fontSize: 12, color: Colors.grey[600], fontStyle: FontStyle.italic),
+          ),
+        ],
+      ),
+      actions: [
+        SizedBox(
+          width: double.infinity,
+          child: ElevatedButton.icon(
+            onPressed: onStart,
+            icon: const Icon(Icons.mic, color: Colors.white),
+            label: const Text('Commencer la répétition', style: TextStyle(color: Colors.white, fontSize: 15)),
+            style: ElevatedButton.styleFrom(
+              backgroundColor: Colors.green[600],
+              padding: const EdgeInsets.symmetric(vertical: 12),
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+// ══════════════════════════════════════════════════════════════════════════════
+class _RepDialog extends StatefulWidget {
   final Word word;
   final int repetitionNumber;
   final stt.SpeechToText speechToText;
-  final bool isSpeechInitialized;
+  final FlutterTts flutterTts;
+  final bool sttReady;
+  final bool ttsAvail;
   final VoidCallback onSuccess;
   final VoidCallback onRetry;
-  final Function(String) onError;
 
-  const _RepetitionDialog({
+  const _RepDialog({
     required this.word,
     required this.repetitionNumber,
     required this.speechToText,
-    required this.isSpeechInitialized,
+    required this.flutterTts,
+    required this.sttReady,
+    required this.ttsAvail,
     required this.onSuccess,
     required this.onRetry,
-    required this.onError,
   });
 
   @override
-  State<_RepetitionDialog> createState() => _RepetitionDialogState();
+  State<_RepDialog> createState() => _RepDialogState();
 }
 
-class _RepetitionDialogState extends State<_RepetitionDialog> {
-  bool isListening = false;
-  Timer? _listenTimer;
+class _RepDialogState extends State<_RepDialog> with SingleTickerProviderStateMixin {
+  bool ttsOn = false;
+  bool ready = false;
+  bool listening = false;
+  Timer? _timer;
+  late AnimationController _wCtrl;
+  late Animation<double> _wAnim;
 
-  final List<String> retryMessages = [
-    'Ce n\'est pas grave, réessaie !',
-    'Presque ! Écoute bien et réessaie.',
-    'On réessaie ? Tu vas y arriver !',
-    'Pas tout à fait, on y va une autre fois !',
-    'Ne te décourage pas, réessaie !',
-  ];
-
-  final List<String> encouragementMessages = [
-    'Bravo !', 'Excellent !', 'Très bien !', 'Parfait !', 'Magnifique !', 'Super !',
-  ];
+  @override
+  void initState() {
+    super.initState();
+    _wCtrl = AnimationController(vsync: this, duration: const Duration(milliseconds: 700))..repeat(reverse: true);
+    _wAnim = Tween<double>(begin: 0.3, end: 1.0).animate(CurvedAnimation(parent: _wCtrl, curve: Curves.easeInOut));
+    WidgetsBinding.instance.addPostFrameCallback((_) => _playTts());
+  }
 
   @override
   void dispose() {
-    _listenTimer?.cancel();
+    _timer?.cancel();
+    _wCtrl.dispose();
     widget.speechToText.stop();
     super.dispose();
   }
 
-  Future<void> _startListening() async {
-    if (!widget.isSpeechInitialized || isListening) return;
+  Future<void> _playTts() async {
+    if (!widget.ttsAvail) {
+      if (mounted) setState(() {
+        ttsOn = false;
+        ready = true;
+      });
+      return;
+    }
+    if (mounted) setState(() {
+      ttsOn = true;
+      ready = false;
+    });
+    widget.flutterTts.setCompletionHandler(() {
+      if (mounted) setState(() {
+        ttsOn = false;
+        ready = true;
+      });
+    });
+    widget.flutterTts.setErrorHandler((_) {
+      if (mounted) setState(() {
+        ttsOn = false;
+        ready = true;
+      });
+    });
+    try {
+      await widget.flutterTts.stop();
+      await widget.flutterTts.speak(
+        widget.repetitionNumber == 1 ? 'Répète ce mot : ${widget.word.word}' : widget.word.word,
+      );
+    } catch (_) {
+      if (mounted) setState(() {
+        ttsOn = false;
+        ready = true;
+      });
+    }
+    Future.delayed(const Duration(seconds: 6), () {
+      if (mounted && ttsOn) setState(() {
+        ttsOn = false;
+        ready = true;
+      });
+    });
+  }
 
-    setState(() => isListening = true);
-    print('🎤 Début écoute pour: ${widget.word.mot}');
+  Future<void> _replayTts() async {
+    if (listening) return;
+    setState(() {
+      ttsOn = true;
+      ready = false;
+    });
+    await widget.flutterTts.stop();
+    await widget.flutterTts.speak(widget.word.word);
+    Future.delayed(const Duration(seconds: 4), () {
+      if (mounted && ttsOn) setState(() {
+        ttsOn = false;
+        ready = true;
+      });
+    });
+  }
 
-    // Timeout global de 8 secondes
-    _listenTimer = Timer(const Duration(seconds: 8), () async {
-      if (isListening) {
-        print('⏱️ Timeout');
-        await _stopListening();
-        _showMessage('Le délai est dépassé, réessaie !', Colors.orange);
+  Future<void> _listen() async {
+    if (!widget.sttReady || listening || ttsOn || !ready) return;
+    setState(() => listening = true);
+    await widget.flutterTts.stop();
+    _timer = Timer(const Duration(seconds: 8), () async {
+      if (listening) {
+        await _stop();
+        _snack('Délai dépassé !', Colors.orange);
         widget.onRetry();
       }
     });
-
     try {
       await widget.speechToText.listen(
-        onResult: (result) {
-          print('📢 Résultat brut: "${result.recognizedWords}" (final: ${result.finalResult})');
-          if (result.finalResult && mounted) {
-            _stopListening();
-            String recognized = result.recognizedWords.toLowerCase().trim();
-            print('🎤 Mot reconnu: "$recognized" attendu: "${widget.word.mot}"');
-
-            if (_compareWords(recognized, widget.word.mot.toLowerCase())) {
-              String msg = encouragementMessages[DateTime.now().millisecond % encouragementMessages.length];
-              _showMessage('$msg Tu as réussi la répétition ${widget.repetitionNumber}/3 !', Colors.green);
+        onResult: (r) {
+          if (r.finalResult && mounted) {
+            _stop();
+            final rec = r.recognizedWords.toLowerCase().trim();
+            if (_match(rec, widget.word.word.toLowerCase())) {
+              _snack('Bravo ! Répétition ${widget.repetitionNumber}/3 ✓', Colors.green);
               Navigator.pop(context);
-              Future.delayed(const Duration(seconds: 1), () {
-                if (mounted) widget.onSuccess();
-              });
+              Future.delayed(const Duration(milliseconds: 600), widget.onSuccess);
             } else {
-              String msg = retryMessages[DateTime.now().millisecond % retryMessages.length];
-              _showMessage(msg, Colors.orange);
+              _snack('Réessaie !', Colors.orange);
               Navigator.pop(context);
-              Future.delayed(const Duration(seconds: 1), () {
-                if (mounted) widget.onRetry();
-              });
+              Future.delayed(const Duration(milliseconds: 600), widget.onRetry);
             }
           }
         },
-        onSoundLevelChange: (level) {
-          print('🎙️ Niveau sonore: $level');
-        },
-        localeId: 'fr',      // Chrome accepte 'fr' mieux que 'fr_FR'
-        listenFor: const Duration(seconds: 5),
+        localeId: 'fr-FR',
+        listenFor: const Duration(seconds: 6),
         pauseFor: const Duration(seconds: 2),
         partialResults: true,
         cancelOnError: false,
       );
-    } catch (e) {
-      print('❌ Erreur listen: $e');
-      _stopListening();
-      widget.onError('Problème technique, réessaie');
+    } catch (_) {
+      await _stop();
       widget.onRetry();
     }
   }
 
-  Future<void> _stopListening() async {
-    _listenTimer?.cancel();
-    if (isListening) {
+  Future<void> _stop() async {
+    _timer?.cancel();
+    if (listening) {
       await widget.speechToText.stop();
-      if (mounted) setState(() => isListening = false);
-      print('🛑 Écoute arrêtée');
+      if (mounted) setState(() => listening = false);
     }
   }
 
-  void _showMessage(String msg, Color color) {
-    if (mounted) {
-      try {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text(msg), backgroundColor: color, duration: const Duration(seconds: 2)),
-        );
-      } catch (e) {
-        print('⚠️ Cannot show message: $e');
+  bool _match(String a, String b) {
+    final na = _norm(a), nb = _norm(b);
+    return na.contains(nb) || nb.contains(na) || _lev(na, nb) <= 2;
+  }
+
+  String _norm(String s) {
+    const f = 'àâäæçéèêëìîïòôöœùûüñ';
+    const t = 'aaaaaaceeeeiioooeuuun';
+    var r = s.toLowerCase();
+    for (int i = 0; i < f.length; i++) r = r.replaceAll(f[i], t[i]);
+    return r.replaceAll(RegExp(r'[^a-z0-9]'), '');
+  }
+
+  int _lev(String a, String b) {
+    if (a == b) return 0;
+    if (a.isEmpty) return b.length;
+    if (b.isEmpty) return a.length;
+    List<int> p = List.generate(b.length + 1, (i) => i);
+    for (int i = 0; i < a.length; i++) {
+      List<int> c = [i + 1, ...List.filled(b.length, 0)];
+      for (int j = 0; j < b.length; j++) {
+        c[j + 1] = a[i] == b[j] ? p[j] : 1 + [p[j], p[j + 1], c[j]].reduce((x, y) => x < y ? x : y);
       }
+      p = c;
     }
+    return p[b.length];
   }
 
-  bool _compareWords(String recognized, String expected) {
-    String norm1 = _normalizeString(recognized);
-    String norm2 = _normalizeString(expected);
-    bool match = norm1.contains(norm2) || norm2.contains(norm1);
-    print('Comparaison: "$norm1" vs "$norm2" => $match');
-    return match;
-  }
-
-  String _normalizeString(String str) {
-    const accents = 'àâäæçéèêëìîïòôöœùûüñ';
-    const base = 'aaaaaaceeeeiioooeuuun';
-    String result = str.toLowerCase();
-    for (int i = 0; i < accents.length; i++) {
-      result = result.replaceAll(accents[i], base[i]);
-    }
-    return result.replaceAll(RegExp(r'[^a-z0-9]'), '');
+  void _snack(String msg, Color color) {
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(msg, style: const TextStyle(fontSize: 15)),
+        backgroundColor: color,
+        duration: const Duration(seconds: 2),
+        behavior: SnackBarBehavior.floating,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+      ),
+    );
   }
 
   @override
   Widget build(BuildContext context) {
     return AlertDialog(
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(22)),
       backgroundColor: Colors.blue[50],
-      title: Text('Répétition ${widget.repetitionNumber}/3',
-          style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold, color: Colors.blue[700])),
+      titlePadding: const EdgeInsets.fromLTRB(20, 18, 20, 0),
+      contentPadding: const EdgeInsets.fromLTRB(20, 14, 20, 0),
+      actionsPadding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
+      title: Row(
+        children: [
+          ...List.generate(3, (i) {
+            final done = i < widget.repetitionNumber - 1;
+            final cur = i == widget.repetitionNumber - 1;
+            return Container(
+              width: 28,
+              height: 28,
+              margin: const EdgeInsets.only(right: 5),
+              decoration: BoxDecoration(
+                color: done ? Colors.green : cur ? const Color(0xFF1565C0) : Colors.grey[300],
+                shape: BoxShape.circle,
+              ),
+              child: Center(
+                child: done
+                    ? const Icon(Icons.check, color: Colors.white, size: 14)
+                    : Text('${i + 1}', style: TextStyle(color: cur ? Colors.white : Colors.grey[600], fontWeight: FontWeight.bold, fontSize: 13)),
+              ),
+            );
+          }),
+          const SizedBox(width: 8),
+          Text(
+            'Répétition ${widget.repetitionNumber}/3',
+            style: const TextStyle(fontSize: 17, fontWeight: FontWeight.bold, color: Color(0xFF1565C0)),
+          ),
+        ],
+      ),
       content: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
+          const SizedBox(height: 14),
           Container(
-            padding: const EdgeInsets.all(16),
-            decoration: BoxDecoration(color: Colors.blue[100], borderRadius: BorderRadius.circular(12)),
-            child: Text(widget.word.mot, style: const TextStyle(fontSize: 28, fontWeight: FontWeight.bold, color: Colors.blue)),
-          ),
-          const SizedBox(height: 20),
-          Text(
-            isListening ? '🎙️ J\'écoute... Parle maintenant !' : 'Appuie sur le bouton et dis le mot !',
-            style: TextStyle(fontSize: 14, color: isListening ? Colors.red[600] : Colors.grey[700]),
-          ),
-          const SizedBox(height: 20),
-          if (isListening)
-            SizedBox(
-              height: 40,
-              child: Row(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: List.generate(5, (i) => AnimatedContainer(
-                  duration: const Duration(milliseconds: 100),
-                  margin: const EdgeInsets.symmetric(horizontal: 4),
-                  width: 6,
-                  height: (i * 8 + 20).toDouble(),
-                  decoration: BoxDecoration(color: Colors.red[600], borderRadius: BorderRadius.circular(3)),
-                )),
-              ),
+            width: double.infinity,
+            padding: const EdgeInsets.symmetric(vertical: 16),
+            decoration: BoxDecoration(
+              color: Colors.white,
+              borderRadius: BorderRadius.circular(14),
+              border: Border.all(color: Colors.blue[200]!, width: 2),
             ),
+            child: Column(
+              children: [
+                Text(widget.word.emoji, style: const TextStyle(fontSize: 52)),
+                const SizedBox(height: 6),
+                Text(
+                  widget.word.word,
+                  textAlign: TextAlign.center,
+                  style: const TextStyle(fontSize: 32, fontWeight: FontWeight.bold, color: Color(0xFF1565C0), letterSpacing: 1.5),
+                ),
+                if (widget.word.traductionArabic != null)
+                  Padding(
+                    padding: const EdgeInsets.only(top: 4),
+                    child: Text(widget.word.traductionArabic!, style: const TextStyle(fontSize: 18, color: Colors.grey)),
+                  ),
+              ],
+            ),
+          ),
+          const SizedBox(height: 14),
+          _statusBox(),
+          const SizedBox(height: 4),
         ],
       ),
       actions: [
+        if (widget.ttsAvail && !listening)
+          IconButton(
+            onPressed: ttsOn ? null : _replayTts,
+            icon: Icon(Icons.replay, color: ttsOn ? Colors.grey[400] : const Color(0xFF1565C0)),
+            tooltip: 'Réécouter',
+          ),
+        const Spacer(),
         ElevatedButton.icon(
-          onPressed: isListening ? _stopListening : _startListening,
-          icon: Icon(isListening ? Icons.stop : Icons.mic),
-          label: Text(isListening ? 'Arrêter' : 'Écouter'),
+          onPressed: _action(),
+          icon: Icon(_icon()),
+          label: Text(_label()),
           style: ElevatedButton.styleFrom(
-            backgroundColor: isListening ? Colors.red[600] : Colors.blue[600],
+            backgroundColor: _color(),
+            foregroundColor: Colors.white,
+            padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
           ),
         ),
       ],
     );
+  }
+
+  Widget _statusBox() {
+    if (ttsOn) {
+      return _box(
+        Colors.purple[50]!,
+        Colors.purple[200]!,
+        Row(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Icon(Icons.volume_up, color: Colors.purple[700], size: 20),
+            const SizedBox(width: 8),
+            Text('Écoute la prononciation…', style: TextStyle(color: Colors.purple[700], fontWeight: FontWeight.w600)),
+            const SizedBox(width: 10),
+            AnimatedBuilder(
+              animation: _wAnim,
+              builder: (_, __) => Row(
+                children: List.generate(
+                  4,
+                  (i) {
+                    const hs = [10.0, 16.0, 12.0, 18.0];
+                    return Container(
+                      width: 3,
+                      margin: const EdgeInsets.symmetric(horizontal: 2),
+                      height: hs[i] * _wAnim.value,
+                      decoration: BoxDecoration(color: Colors.purple[400], borderRadius: BorderRadius.circular(2)),
+                    );
+                  },
+                ),
+              ),
+            ),
+          ],
+        ),
+      );
+    }
+    if (listening) {
+      return _box(
+        Colors.red[50]!,
+        Colors.red[200]!,
+        Row(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            AnimatedBuilder(
+              animation: _wAnim,
+              builder: (_, __) => Icon(Icons.mic, color: Colors.red.withOpacity(0.4 + 0.6 * _wAnim.value), size: 22),
+            ),
+            const SizedBox(width: 8),
+            Text('Je t\'écoute !', style: TextStyle(color: Colors.red[700], fontWeight: FontWeight.w600)),
+          ],
+        ),
+      );
+    }
+    if (ready) {
+      return _box(
+        Colors.green[50]!,
+        Colors.green[200]!,
+        Row(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Icon(Icons.mic, color: Colors.green[700], size: 20),
+            const SizedBox(width: 8),
+            Text('Appuie sur "Parler !"', style: TextStyle(color: Colors.green[700], fontWeight: FontWeight.w600)),
+          ],
+        ),
+      );
+    }
+    return _box(
+      Colors.grey[100]!,
+      Colors.grey[300]!,
+      Row(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          SizedBox(width: 14, height: 14, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.grey[500])),
+          const SizedBox(width: 8),
+          Text('Préparation…', style: TextStyle(color: Colors.grey[600])),
+        ],
+      ),
+    );
+  }
+
+  Widget _box(Color bg, Color border, Widget child) => Container(
+        width: double.infinity,
+        padding: const EdgeInsets.symmetric(vertical: 10, horizontal: 14),
+        decoration: BoxDecoration(color: bg, borderRadius: BorderRadius.circular(10), border: Border.all(color: border)),
+        child: child,
+      );
+
+  VoidCallback? _action() {
+    if (ttsOn || !ready) return null;
+    if (listening) return _stop;
+    return _listen;
+  }
+
+  IconData _icon() {
+    if (ttsOn) return Icons.volume_up;
+    if (listening) return Icons.stop;
+    return Icons.mic;
+  }
+
+  String _label() {
+    if (ttsOn) return 'Écoute…';
+    if (listening) return 'Arrêter';
+    if (ready) return 'Parler !';
+    return 'Patiente…';
+  }
+
+  Color _color() {
+    if (ttsOn) return Colors.grey;
+    if (listening) return Colors.red;
+    if (ready) return const Color(0xFF1565C0);
+    return Colors.grey;
   }
 }
