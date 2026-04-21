@@ -100,7 +100,7 @@ class _ParcourGameScreenState extends State<ParcourGameScreen> {
     score: score,
     maxScore: challenges.length * 10,
     durationSeconds: _sw.elapsed.inSeconds,
-  );
+);
   // 
     final pct = (score / (challenges.length * 10) * 100).round();
     _tts.speak('Parcours terminé ! Félicitations !');

@@ -82,13 +82,12 @@ class _QuizGameScreenState extends State<QuizGameScreen> {
   void _finish() {
     _sw.stop();
     ProgressService().recordScore(
-    levelId: widget.levelData.id,
-    gameType: 'quiz',
-    score: score,
-    maxScore: questions.length * 10,
-    durationSeconds: _sw.elapsed.inSeconds,
-
-  );
+  levelId: widget.levelData.id,
+  gameType: 'quiz',
+  score: score,
+  maxScore: questions.length * 10,
+  durationSeconds: _sw.elapsed.inSeconds,
+);
     final pct = (score / (questions.length * 10) * 100).round();
     _tts.speak(AdaptiveEngine().encouragementMessage(score * 100 ~/ (questions.length * 10)));
     showDialog(context: context, barrierDismissible: false, builder: (_) => AlertDialog(

@@ -1,7 +1,4 @@
 // lib/models/student_models.dart
-// Contient : Student, Teacher, Island, GameScore, WordStat
-// Utilisé par : progress_service, firebase_service,
-//               world_map_screen, teacher_dashboard
 
 class Student {
   final String id;
@@ -10,12 +7,12 @@ class Student {
   final int totalStars;
   final int currentStreak;
   final DateTime lastActivity;
-  // levelId → étoiles (0-3)
   final Map<String, int> levelStars;
-  // levelId → débloqué ?
   final Map<String, bool> levelUnlocked;
-  // Identifiant de la classe (pour regrouper élèves d'un prof)
   final String? classCode;
+  // NOUVEAU : pour chaque levelId, liste des jeux terminés
+  // ex: {'cp-w1-alpha': ['memory', 'quiz'], 'cp-w2-numbers': ['memory']}
+  final Map<String, List<String>> completedGames;
 
   Student({
     required this.id,
@@ -27,8 +24,10 @@ class Student {
     Map<String, int>? levelStars,
     Map<String, bool>? levelUnlocked,
     this.classCode,
+    Map<String, List<String>>? completedGames,
   })  : levelStars = levelStars ?? {},
-        levelUnlocked = levelUnlocked ?? {'cp-w1-alpha': true};
+        levelUnlocked = levelUnlocked ?? {'cp-w1-alpha': true},
+        completedGames = completedGames ?? {};
 
   Student copyWith({
     String? name,
@@ -39,6 +38,7 @@ class Student {
     Map<String, int>? levelStars,
     Map<String, bool>? levelUnlocked,
     String? classCode,
+    Map<String, List<String>>? completedGames,
   }) {
     return Student(
       id: id,
@@ -50,6 +50,7 @@ class Student {
       levelStars: levelStars ?? Map.from(this.levelStars),
       levelUnlocked: levelUnlocked ?? Map.from(this.levelUnlocked),
       classCode: classCode ?? this.classCode,
+      completedGames: completedGames ?? Map.from(this.completedGames),
     );
   }
 
@@ -63,6 +64,7 @@ class Student {
         'levelStars': levelStars,
         'levelUnlocked': levelUnlocked,
         'classCode': classCode,
+        'completedGames': completedGames,
       };
 
   factory Student.fromJson(Map<String, dynamic> j) => Student(
@@ -77,6 +79,13 @@ class Student {
         levelUnlocked: (j['levelUnlocked'] as Map<String, dynamic>? ?? {})
             .map((k, v) => MapEntry(k, v as bool)),
         classCode: j['classCode'] as String?,
+        completedGames:
+            (j['completedGames'] as Map<String, dynamic>? ?? {}).map(
+          (k, v) => MapEntry(
+            k,
+            (v as List<dynamic>).map((e) => e as String).toList(),
+          ),
+        ),
       );
 }
 
@@ -86,7 +95,6 @@ class Teacher {
   final String email;
   final String name;
   final String schoolName;
-  // Code unique que les élèves entrent pour rejoindre la classe
   final String classCode;
 
   Teacher({
@@ -145,13 +153,13 @@ class GameScore {
   final String id;
   final String studentId;
   final String levelId;
-  final String gameType; // 'memory','quiz','bingo','parcours'
+  final String gameType;
   final int score;
   final int maxScore;
   final int durationSeconds;
   final int errorsCount;
   final DateTime playedAt;
-  bool synced; // true = déjà envoyé à Firestore
+  bool synced;
 
   GameScore({
     required this.id,
@@ -204,13 +212,12 @@ class GameScore {
 }
 
 // ─────────────────────────────────────────────
-// Statistique par mot (pour l'algorithme SM-2)
 class WordStat {
   final int wordId;
-  int attempts;     // nombre total d'essais
-  int successes;    // nombre de réussites
-  double easeFactor; // SM-2 : commence à 2.5
-  int interval;      // jours avant prochaine révision
+  int attempts;
+  int successes;
+  double easeFactor;
+  int interval;
   DateTime? nextReview;
 
   WordStat({
@@ -228,28 +235,22 @@ class WordStat {
   bool get isDue =>
       nextReview == null || DateTime.now().isAfter(nextReview!);
 
-  // quality : 0=échec total, 3=correct avec effort, 5=parfait
   void updateSM2(int quality) {
     attempts++;
     if (quality >= 3) successes++;
-
     if (quality < 3) {
       interval = 1;
+    } else if (interval == 1) {
+      interval = 1;
+    } else if (interval == 2) {
+      interval = 6;
     } else {
-      if (interval == 1) {
-        interval = 1;
-      } else if (interval == 2) {
-        interval = 6;
-      } else {
-        interval = (interval * easeFactor).round();
-      }
+      interval = (interval * easeFactor).round();
     }
-
     easeFactor = (easeFactor +
             0.1 -
             (5 - quality) * (0.08 + (5 - quality) * 0.02))
         .clamp(1.3, 2.8);
-
     nextReview = DateTime.now().add(Duration(days: interval));
   }
 
