@@ -12,7 +12,92 @@
   <link rel="icon" type="image/png" href="favicon.png"/>
   <title>LinguaKids Maroc</title>
   <link rel="manifest" href="manifest.json">
-  <!-- PAS de Firebase JS ici — Flutter s'en charge via Dart -->
+
+  <script>
+    // ─────────────────────────────────────────────────────────
+    // WEB SPEECH API — appelée depuis Dart via JS interop
+    // C'est l'API native du navigateur, bien plus fiable
+    // que flutter_tts sur web.
+    // ─────────────────────────────────────────────────────────
+    var _lkVoice = null;
+    var _lkReady = false;
+
+    // Charger les voix disponibles (asynchrone dans Chrome)
+    function _loadVoices() {
+      var voices = window.speechSynthesis.getVoices();
+      if (voices.length === 0) return;
+      // Chercher une voix française dans cet ordre de priorité
+      var priorities = ['fr-FR', 'fr-CA', 'fr-BE', 'fr'];
+      for (var i = 0; i < priorities.length; i++) {
+        var found = voices.find(function(v) {
+          return v.lang.toLowerCase().startsWith(priorities[i].toLowerCase());
+        });
+        if (found) {
+          _lkVoice = found;
+          break;
+        }
+      }
+      _lkReady = true;
+      console.log('[LinguaKids TTS] Voix chargée:', _lkVoice ? _lkVoice.name : 'défaut');
+    }
+
+    // Chrome charge les voix de manière asynchrone
+    if (window.speechSynthesis.onvoiceschanged !== undefined) {
+      window.speechSynthesis.onvoiceschanged = _loadVoices;
+    }
+    // Essayer de charger immédiatement aussi (Firefox/Safari)
+    _loadVoices();
+
+    // ── Fonction principale appelée depuis Dart ──────────────
+    function lkSpeak(text, rate, pitch, volume) {
+      if (!text || text.trim() === '') return;
+      try {
+        // Annuler tout ce qui était en cours
+        window.speechSynthesis.cancel();
+
+        var u = new SpeechSynthesisUtterance(text.trim());
+        u.lang   = 'fr-FR';
+        u.rate   = rate   || 0.85;
+        u.pitch  = pitch  || 1.1;
+        u.volume = volume || 1.0;
+
+        // Charger les voix si pas encore fait
+        if (!_lkReady) _loadVoices();
+        if (_lkVoice) u.voice = _lkVoice;
+
+        u.onerror = function(e) {
+          console.warn('[LinguaKids TTS] Erreur:', e.error);
+        };
+
+        window.speechSynthesis.speak(u);
+
+        // Workaround Chrome bug : speech s'arrête après 15s
+        // On vérifie et relance si nécessaire
+        setTimeout(function() {
+          if (window.speechSynthesis.paused) {
+            window.speechSynthesis.resume();
+          }
+        }, 100);
+
+      } catch(e) {
+        console.error('[LinguaKids TTS] Exception:', e);
+      }
+    }
+
+    // ── Stop ────────────────────────────────────────────────
+    function lkStop() {
+      try {
+        window.speechSynthesis.cancel();
+      } catch(e) {}
+    }
+
+    // ── Vérifier si disponible ───────────────────────────────
+    function lkIsAvailable() {
+      return 'speechSynthesis' in window;
+    }
+
+    console.log('[LinguaKids TTS] Web Speech API:', lkIsAvailable() ? 'disponible' : 'non disponible');
+  </script>
 </head>
 <body>
   <script src="flutter_bootstrap.js" async></script>

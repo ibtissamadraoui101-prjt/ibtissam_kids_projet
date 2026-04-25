@@ -1,49 +1,70 @@
 // lib/services/tts_service.dart
 import 'package:flutter/foundation.dart';
 import 'package:flutter_tts/flutter_tts.dart';
+import 'tts_web.dart'
+    if (dart.library.io) 'tts_mobile_stub.dart' as tts_platform;
 
 class TtsService {
-  static final TtsService _i = TtsService._();
-  factory TtsService() => _i;
-  TtsService._();
+  static final TtsService _instance = TtsService._internal();
+  factory TtsService() => _instance;
+  TtsService._internal();
 
-  final FlutterTts _tts = FlutterTts();
-  bool _ready = false;
-  bool _available = false;
+  FlutterTts? _mobileTts;
+  bool _mobileReady = false;
+  bool get isAvailable => true;
 
-  bool get isAvailable => _available;
-  FlutterTts get raw => _tts;
+  FlutterTts get raw {
+    _mobileTts ??= FlutterTts();
+    return _mobileTts!;
+  }
 
   Future<void> init() async {
-    if (_ready) return;
+    if (kIsWeb) {
+      tts_platform.initWebTts();
+      debugPrint('[TtsService] ✅ Mode WEB — dart:html speechSynthesis');
+      return;
+    }
     try {
-      await _tts.setLanguage('fr-FR');
-      await _tts.setSpeechRate(0.42);
-      await _tts.setVolume(1.0);
-      await _tts.setPitch(1.1);
-      _available = true;
-      _ready = true;
+      _mobileTts = FlutterTts();
+      await _mobileTts!.setLanguage('fr-FR');
+      await _mobileTts!.setSpeechRate(0.85);
+      await _mobileTts!.setVolume(1.0);
+      await _mobileTts!.setPitch(1.1);
+      _mobileReady = true;
     } catch (e) {
-      debugPrint('TTS init error: $e');
-      _ready = true;
-      _available = false;
+      debugPrint('[TtsService] Erreur init mobile: $e');
     }
   }
 
+  /// Appeler au 1er tap dans l'app pour débloquer Chrome
+  void unlockAudio() {
+    if (kIsWeb) tts_platform.unlockAudio();
+  }
+
   Future<void> speak(String text) async {
-    if (!_ready) await init();
     if (text.trim().isEmpty) return;
+    if (kIsWeb) {
+      tts_platform.webSpeak(text.trim());
+    } else {
+      await _speakMobile(text.trim());
+    }
+  }
+
+  Future<void> _speakMobile(String text) async {
+    if (!_mobileReady) await init();
     try {
-      await _tts.stop();
-      await _tts.speak(text.trim());
+      await _mobileTts?.stop();
+      await _mobileTts?.speak(text);
     } catch (e) {
-      debugPrint('TTS speak error: $e');
+      debugPrint('[TtsService] Erreur speak mobile: $e');
     }
   }
 
   Future<void> stop() async {
-    try {
-      await _tts.stop();
-    } catch (_) {}
+    if (kIsWeb) {
+      tts_platform.webStop();
+    } else {
+      try { await _mobileTts?.stop(); } catch (_) {}
+    }
   }
 }

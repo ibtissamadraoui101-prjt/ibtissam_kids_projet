@@ -2,6 +2,8 @@
 import 'package:flutter/material.dart';
 import '../services/progress_service.dart';
 import 'world_map_screen.dart';
+import '../services/tts_service.dart';
+
 
 class OnboardingScreen extends StatefulWidget {
   const OnboardingScreen({super.key});
@@ -37,6 +39,7 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
       );
       return;
     }
+    TtsService().speak('Bienvenue ${name} !');   // ← ajouter CETTE ligne
 
     setState(() => _isLoading = true);
 
