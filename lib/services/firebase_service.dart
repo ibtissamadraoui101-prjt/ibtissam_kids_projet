@@ -1,6 +1,7 @@
 // lib/services/firebase_service.dart
-// Gère : Auth enseignant, sync Firestore, lecture données élèves
-// Utilisé par : progress_service, teacher_dashboard, teacher_login
+// ✅ CORRECTION : Messages d'erreur plus précis et en français
+// ✅ AJOUT : Gestion du cas 'invalid-credential' (nouveau code Firebase SDK v5)
+// ✅ AJOUT : Logs de debug pour faciliter le diagnostic
 
 import 'package:flutter/foundation.dart';
 import 'package:firebase_auth/firebase_auth.dart';
@@ -27,27 +28,20 @@ class FirebaseService {
   /// Connexion enseignant avec email + mot de passe
   Future<String?> loginTeacher(String email, String password) async {
     try {
+      debugPrint('[Firebase] Tentative connexion: $email');
       final credential = await _auth.signInWithEmailAndPassword(
         email: email.trim(),
         password: password.trim(),
       );
       await _loadTeacherProfile(credential.user!.uid);
+      debugPrint('[Firebase] ✅ Connexion réussie: ${credential.user!.uid}');
       return null; // null = succès
     } on FirebaseAuthException catch (e) {
-      switch (e.code) {
-        case 'user-not-found':
-          return 'Aucun compte trouvé pour cet email.';
-        case 'wrong-password':
-          return 'Mot de passe incorrect.';
-        case 'invalid-email':
-          return 'Email invalide.';
-        case 'too-many-requests':
-          return 'Trop de tentatives. Réessaie dans 5 minutes.';
-        default:
-          return 'Erreur : ${e.message}';
-      }
+      debugPrint('[Firebase] ❌ Auth error: ${e.code} — ${e.message}');
+      return _authErrorMessage(e.code);
     } catch (e) {
-      return 'Erreur de connexion : $e';
+      debugPrint('[Firebase] ❌ Erreur inattendue: $e');
+      return 'Erreur de connexion. Vérifiez votre connexion internet.';
     }
   }
 
@@ -59,14 +53,19 @@ class FirebaseService {
     required String schoolName,
   }) async {
     try {
+      debugPrint('[Firebase] Création compte: $email');
+
+      // 1. Créer l'utilisateur Firebase Auth
       final credential = await _auth.createUserWithEmailAndPassword(
         email: email.trim(),
         password: password.trim(),
       );
+      debugPrint('[Firebase] ✅ Auth créée: ${credential.user!.uid}');
 
-      // Générer un code classe unique (6 caractères)
+      // 2. Générer un code classe unique
       final classCode = _generateClassCode(credential.user!.uid);
 
+      // 3. Construire l'objet Teacher
       final teacher = Teacher(
         id: credential.user!.uid,
         email: email.trim(),
@@ -75,24 +74,58 @@ class FirebaseService {
         classCode: classCode,
       );
 
-      // Sauvegarder dans Firestore
+      // 4. Sauvegarder dans Firestore
       await _db
           .collection('teachers')
           .doc(credential.user!.uid)
           .set(teacher.toJson());
+      debugPrint('[Firebase] ✅ Profil Firestore créé, code classe: $classCode');
 
       _currentTeacher = teacher;
-      return null; // succès
+      return null; // null = succès
+
     } on FirebaseAuthException catch (e) {
-      if (e.code == 'email-already-in-use') {
-        return 'Cet email est déjà utilisé.';
-      }
-      if (e.code == 'weak-password') {
-        return 'Mot de passe trop faible (6 caractères minimum).';
-      }
-      return 'Erreur : ${e.message}';
+      debugPrint('[Firebase] ❌ Auth error register: ${e.code} — ${e.message}');
+      return _authErrorMessage(e.code);
+    } on FirebaseException catch (e) {
+      debugPrint('[Firebase] ❌ Firestore error: ${e.code} — ${e.message}');
+      // L'Auth a réussi mais Firestore a échoué → on nettoie
+      try {
+        await _auth.currentUser?.delete();
+      } catch (_) {}
+      return 'Erreur de sauvegarde des données. Réessaie.';
     } catch (e) {
-      return 'Erreur lors de la création : $e';
+      debugPrint('[Firebase] ❌ Erreur inattendue: $e');
+      return 'Erreur lors de la création du compte. Vérifiez votre connexion.';
+    }
+  }
+
+  /// Messages d'erreur Firebase en français
+  String _authErrorMessage(String code) {
+    switch (code) {
+      case 'user-not-found':
+        return 'Aucun compte trouvé pour cet email.';
+      case 'wrong-password':
+        return 'Mot de passe incorrect.';
+      case 'invalid-credential':
+        // Nouveau code Firebase SDK v5+ (remplace user-not-found + wrong-password)
+        return 'Email ou mot de passe incorrect.';
+      case 'invalid-email':
+        return 'Adresse email invalide.';
+      case 'email-already-in-use':
+        return 'Cet email est déjà utilisé par un autre compte.';
+      case 'weak-password':
+        return 'Mot de passe trop faible (minimum 6 caractères).';
+      case 'too-many-requests':
+        return 'Trop de tentatives. Réessaie dans quelques minutes.';
+      case 'network-request-failed':
+        return 'Pas de connexion internet. Vérifie ta connexion.';
+      case 'operation-not-allowed':
+        return 'Connexion par email non activée. Contacte l\'administrateur.';
+      case 'user-disabled':
+        return 'Ce compte a été désactivé.';
+      default:
+        return 'Erreur d\'authentification ($code). Réessaie.';
     }
   }
 
@@ -100,14 +133,17 @@ class FirebaseService {
   Future<void> logoutTeacher() async {
     await _auth.signOut();
     _currentTeacher = null;
+    debugPrint('[Firebase] Déconnexion réussie');
   }
+  Future<void> resetPassword(String email) async {
+  await _auth.sendPasswordResetEmail(email: email.trim());
+  debugPrint('[Firebase] Email reset envoyé à $email');
+}
 
   // ─────────────────────────────────────────────
   // SYNC RÉSULTATS ÉLÈVE → FIRESTORE
   // ─────────────────────────────────────────────
 
-  /// Envoyer un résultat de jeu vers Firestore
-  /// Appelle uniquement quand internet disponible
   Future<bool> syncScore(GameScore score) async {
     try {
       await _db
@@ -123,7 +159,6 @@ class FirebaseService {
     }
   }
 
-  /// Créer ou mettre à jour le profil élève dans Firestore
   Future<bool> syncStudent(Student student) async {
     try {
       await _db
@@ -141,24 +176,19 @@ class FirebaseService {
   // LECTURE DONNÉES POUR LE TABLEAU DE BORD
   // ─────────────────────────────────────────────
 
-  /// Récupère tous les élèves d'une classe
   Future<List<Student>> getStudentsByClass(String classCode) async {
     try {
       final query = await _db
           .collection('students')
           .where('classCode', isEqualTo: classCode)
           .get();
-
-      return query.docs
-          .map((doc) => Student.fromJson(doc.data()))
-          .toList();
+      return query.docs.map((doc) => Student.fromJson(doc.data())).toList();
     } catch (e) {
       debugPrint('FirebaseService: erreur getStudents: $e');
       return [];
     }
   }
 
-  /// Récupère les scores d'un élève (50 derniers)
   Future<List<GameScore>> getScoresForStudent(String studentId) async {
     try {
       final query = await _db
@@ -168,10 +198,7 @@ class FirebaseService {
           .orderBy('playedAt', descending: true)
           .limit(50)
           .get();
-
-      return query.docs
-          .map((doc) => GameScore.fromJson(doc.data()))
-          .toList();
+      return query.docs.map((doc) => GameScore.fromJson(doc.data())).toList();
     } catch (e) {
       debugPrint('FirebaseService: erreur getScores: $e');
       return [];
@@ -187,6 +214,9 @@ class FirebaseService {
       final doc = await _db.collection('teachers').doc(uid).get();
       if (doc.exists) {
         _currentTeacher = Teacher.fromJson(doc.data()!);
+        debugPrint('[Firebase] Profil enseignant chargé: ${_currentTeacher!.name}');
+      } else {
+        debugPrint('[Firebase] ⚠️ Profil Firestore introuvable pour $uid');
       }
     } catch (e) {
       debugPrint('FirebaseService: erreur loadTeacher: $e');
