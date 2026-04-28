@@ -383,4 +383,36 @@ class ProgressService extends ChangeNotifier {
       debugPrint('ProgressService sync student fail: $e');
     }
   }
+  // ─────────────────────────────────────────────
+  // MODIFIER LE PROFIL (nom + avatar)
+  // ─────────────────────────────────────────────
+  Future<void> updateProfile(String name, String avatarEmoji) async {
+    if (_student == null) return;
+    _student = _student!.copyWith(
+      name: name,
+      avatarEmoji: avatarEmoji,
+    );
+    await _saveAll();
+    _trySyncStudent();
+    notifyListeners();
+  }
+
+  // ─────────────────────────────────────────────
+  // RÉINITIALISER LA PROGRESSION
+  // ─────────────────────────────────────────────
+  Future<void> resetProgress() async {
+    if (_student == null) return;
+    // Garder le nom et l'avatar, tout remettre à zéro
+    _student = Student(
+      id: _student!.id,
+      name: _student!.name,
+      avatarEmoji: _student!.avatarEmoji,
+      lastActivity: DateTime.now(),
+      levelUnlocked: {'cp-w1-alpha': true},
+    );
+    _scores.clear();
+    _wordStats.clear();
+    await _saveAll();
+    notifyListeners();
+  }
 }
