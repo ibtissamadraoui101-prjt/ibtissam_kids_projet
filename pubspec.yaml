@@ -10,33 +10,34 @@ environment:
 dependencies:
   flutter:
     sdk: flutter
-  web: ^1.1.0  
+  web: ^1.1.0
 
-
-    
-
-  # ── Audio ─────────────────────────────────────
+  # ── Audio ──────────────────────────────────────
   speech_to_text: ^6.6.0
   flutter_tts: ^4.2.5
+  # ✅ NOUVEAU : effets sonores + musique de fond
+  audioplayers: ^6.1.0
+
+  # ── Permissions ────────────────────────────────
   permission_handler: ^12.0.1
 
-  # ── Stockage local ────────────────────────────
+  # ── Stockage local ─────────────────────────────
   shared_preferences: ^2.3.2
 
-  # ── Utilitaires ───────────────────────────────
+  # ── Utilitaires ────────────────────────────────
   uuid: ^4.4.0
   connectivity_plus: ^6.1.0
   intl: ^0.19.0
 
-  # ── Graphiques (tableau de bord enseignant) ───
+  # ── Graphiques ─────────────────────────────────
   fl_chart: ^0.69.0
 
-  # ── Firebase ──────────────────────────────────
+  # ── Firebase ───────────────────────────────────
   firebase_core: ^3.6.0
   firebase_auth: ^5.3.1
   cloud_firestore: ^5.4.4
 
-  # ── UI ────────────────────────────────────────
+  # ── UI ─────────────────────────────────────────
   cupertino_icons: ^1.0.2
 
 dev_dependencies:
@@ -46,10 +47,19 @@ dev_dependencies:
 
 flutter:
   uses-material-design: true
+
   assets:
+    # ── Images ──────────────────────────────────
     - assets/images/cp/
     - assets/images/ce1/
     - assets/images/ce2/
     - assets/images/cm1/
     - assets/images/cm2/
-   
+
+    # ── Sons : effets ────────────────────────────
+    # ✅ NOUVEAU : effets sonores courts
+    - assets/sounds/sfx/
+
+    # ── Sons : musique de fond ───────────────────
+    # ✅ NOUVEAU : musiques en boucle par écran
+    - assets/sounds/music/
