@@ -16,7 +16,7 @@ class ProgressService extends ChangeNotifier {
   static const String _keyScores    = 'scores_v2';
   static const String _keyWordStats = 'word_stats_v2';
 
-  // Ordre obligatoire des 4 jeux dans chaque niveau
+  /// Ordre obligatoire des 4 jeux dans chaque niveau
   static const List<String> gameOrder = [
     'memory',
     'quiz',
@@ -24,17 +24,17 @@ class ProgressService extends ChangeNotifier {
     'parcours',
   ];
 
-  Student? _student;
-  final List<GameScore> _scores   = [];
+  Student?                 _student;
+  final List<GameScore>    _scores    = [];
   final Map<int, WordStat> _wordStats = {};
 
-  Student? get student   => _student;
-  bool get hasStudent    => _student != null;
-  List<GameScore> get allScores => List.unmodifiable(_scores);
+  Student?          get student   => _student;
+  bool              get hasStudent => _student != null;
+  List<GameScore>   get allScores  => List.unmodifiable(_scores);
 
-  // ─────────────────────────────────────────────
-  // INIT
-  // ─────────────────────────────────────────────
+  // ═══════════════════════════════════════════════════
+  // INIT — chargement depuis SharedPreferences
+  // ═══════════════════════════════════════════════════
   Future<void> init() async {
     final prefs = await SharedPreferences.getInstance();
 
@@ -73,34 +73,72 @@ class ProgressService extends ChangeNotifier {
     notifyListeners();
   }
 
-  // ─────────────────────────────────────────────
-  // CRÉER ÉLÈVE
-  // ─────────────────────────────────────────────
+  // ═══════════════════════════════════════════════════
+  // CRÉER UN ÉLÈVE (onboarding)
+  // ═══════════════════════════════════════════════════
   Future<void> createStudent(
     String name, {
-    String emoji = '🦁',
+    String emoji    = '🦁',
     String? classCode,
   }) async {
     _student = Student(
-      id: const Uuid().v4(),
-      name: name,
-      avatarEmoji: emoji,
-      lastActivity: DateTime.now(),
+      id:            const Uuid().v4(),
+      name:          name,
+      avatarEmoji:   emoji,
+      lastActivity:  DateTime.now(),
       levelUnlocked: {'cp-w1-alpha': true},
-      classCode: classCode,
+      classCode:     classCode,
     );
     await _saveAll();
     _trySyncStudent();
     notifyListeners();
   }
 
-  // ─────────────────────────────────────────────
-  // VÉRIFIER SI UN JEU EST DÉBLOQUÉ
-  // Memory = toujours débloqué si le niveau est débloqué
-  // Quiz   = Memory terminé
-  // Bingo  = Quiz terminé
-  // Parcours = Bingo terminé
-  // ─────────────────────────────────────────────
+  // ═══════════════════════════════════════════════════
+  // MODIFIER LE PROFIL (nom + avatar)
+  // Appelé depuis ProfileScreen._editProfile()
+  // ═══════════════════════════════════════════════════
+  Future<void> updateProfile(String name, String avatarEmoji) async {
+    if (_student == null) return;
+    _student = _student!.copyWith(
+      name:        name,
+      avatarEmoji: avatarEmoji,
+    );
+    await _saveAll();
+    _trySyncStudent();
+    notifyListeners();
+  }
+
+  // ═══════════════════════════════════════════════════
+  // RÉINITIALISER LA PROGRESSION
+  // Garde le nom + avatar, remet tout à zéro
+  // Appelé depuis ProfileScreen._confirmReset()
+  // ═══════════════════════════════════════════════════
+  Future<void> resetProgress() async {
+    if (_student == null) return;
+
+    // On garde l'identité de l'élève, on efface sa progression
+    _student = Student(
+      id:            _student!.id,
+      name:          _student!.name,
+      avatarEmoji:   _student!.avatarEmoji,
+      lastActivity:  DateTime.now(),
+      levelUnlocked: {'cp-w1-alpha': true}, // seul CP débloqué
+    );
+    _scores.clear();
+    _wordStats.clear();
+
+    await _saveAll();
+    _trySyncStudent();
+    notifyListeners();
+  }
+
+  // ═══════════════════════════════════════════════════
+  // DÉBLOCAGE ET COMPLÉTION DES JEUX
+  // ═══════════════════════════════════════════════════
+
+  /// Memory = toujours débloqué si le niveau est débloqué.
+  /// Quiz = Memory terminé · Bingo = Quiz terminé · Parcours = Bingo terminé
   bool isGameUnlocked(String levelId, String gameType) {
     if (_student == null) return false;
     if (!isUnlocked(levelId)) return false;
@@ -109,32 +147,21 @@ class ProgressService extends ChangeNotifier {
     if (idx == -1) return false;
     if (idx == 0) return true; // Memory toujours ouvert
 
-    // Le jeu précédent doit être terminé
     final prevGame = gameOrder[idx - 1];
     return hasCompletedGame(levelId, prevGame);
   }
 
-  // ─────────────────────────────────────────────
-  // VÉRIFIER SI UN JEU A ÉTÉ TERMINÉ
-  // ─────────────────────────────────────────────
   bool hasCompletedGame(String levelId, String gameType) {
     if (_student == null) return false;
     final games = _student!.completedGames[levelId] ?? [];
     return games.contains(gameType);
   }
 
-  // ─────────────────────────────────────────────
-  // NOMBRE DE JEUX COMPLÉTÉS POUR UN NIVEAU
-  // ─────────────────────────────────────────────
   int completedGameCount(String levelId) {
     if (_student == null) return 0;
-    final games = _student!.completedGames[levelId] ?? [];
-    return games.length;
+    return (_student!.completedGames[levelId] ?? []).length;
   }
 
-  // ─────────────────────────────────────────────
-  // PROCHAIN JEU À JOUER
-  // ─────────────────────────────────────────────
   String? nextGameToPlay(String levelId) {
     for (final game in gameOrder) {
       if (!hasCompletedGame(levelId, game)) return game;
@@ -142,38 +169,38 @@ class ProgressService extends ChangeNotifier {
     return null; // tous terminés
   }
 
-  // ─────────────────────────────────────────────
-  // ENREGISTRER LA FIN D'UN JEU
-  // Appelé à la fin de chaque partie
-  // ─────────────────────────────────────────────
+  // ═══════════════════════════════════════════════════
+  // ENREGISTRER LA FIN D'UNE PARTIE
+  // Appelé à la fin de Memory / Quiz / Bingo / Parcours
+  // ═══════════════════════════════════════════════════
   Future<void> recordScore({
     required String levelId,
     required String gameType,
-    required int score,
-    required int maxScore,
-    int durationSeconds = 0,
-    int errorsCount = 0,
-    Map<int, int>? wordQualities,
+    required int    score,
+    required int    maxScore,
+    int             durationSeconds = 0,
+    int             errorsCount     = 0,
+    Map<int, int>?  wordQualities,
   }) async {
     if (_student == null) return;
 
     final gameScore = GameScore(
-      id: const Uuid().v4(),
-      studentId: _student!.id,
-      levelId: levelId,
-      gameType: gameType,
-      score: score,
-      maxScore: maxScore,
+      id:              const Uuid().v4(),
+      studentId:       _student!.id,
+      levelId:         levelId,
+      gameType:        gameType,
+      score:           score,
+      maxScore:        maxScore,
       durationSeconds: durationSeconds,
-      errorsCount: errorsCount,
-      playedAt: DateTime.now(),
+      errorsCount:     errorsCount,
+      playedAt:        DateTime.now(),
     );
 
-    // 1. Historique local
+    // 1. Historique local (max 200 entrées)
     _scores.add(gameScore);
     if (_scores.length > 200) _scores.removeAt(0);
 
-    // 2. SM-2 mots
+    // 2. SM-2 — mise à jour des stats par mot
     if (wordQualities != null) {
       wordQualities.forEach((wordId, quality) {
         _wordStats.putIfAbsent(wordId, () => WordStat(wordId: wordId));
@@ -181,53 +208,49 @@ class ProgressService extends ChangeNotifier {
       });
     }
 
-    // 3. Marquer le jeu comme complété
-    final updatedCompleted =
-        Map<String, List<String>>.from(_student!.completedGames);
-    final gamesForLevel =
-        List<String>.from(updatedCompleted[levelId] ?? []);
+    // 3. Marquer ce jeu comme terminé pour ce niveau
+    final updatedCompleted = Map<String, List<String>>.from(
+        _student!.completedGames);
+    final gamesForLevel = List<String>.from(
+        updatedCompleted[levelId] ?? []);
     if (!gamesForLevel.contains(gameType)) {
       gamesForLevel.add(gameType);
     }
     updatedCompleted[levelId] = gamesForLevel;
 
-    // 4. Étoiles (seulement si tous les jeux du niveau sont faits)
-    final allGamesDone = gameOrder.every(
-      (g) => gamesForLevel.contains(g),
-    );
-
-    final newStars = allGamesDone ? gameScore.stars : 0;
+    // 4. Étoiles — seulement si les 4 jeux du niveau sont terminés
+    final allGamesDone = gameOrder.every((g) => gamesForLevel.contains(g));
+    final newStars     = allGamesDone ? gameScore.stars : 0;
     final currentStars = _student!.levelStars[levelId] ?? 0;
-    final bonusStars = newStars > currentStars ? newStars - currentStars : 0;
+    final bonusStars   = newStars > currentStars
+        ? newStars - currentStars
+        : 0;
 
     final updatedLevelStars = Map<String, int>.from(_student!.levelStars);
-    if (newStars > currentStars) {
-      updatedLevelStars[levelId] = newStars;
-    }
+    if (newStars > currentStars) updatedLevelStars[levelId] = newStars;
 
-    // 5. Débloquer niveau suivant si tous jeux terminés + >= 2 étoiles
-    final updatedUnlocked =
-        Map<String, bool>.from(_student!.levelUnlocked);
+    // 5. Débloquer le niveau suivant (si >= 2 étoiles)
+    final updatedUnlocked = Map<String, bool>.from(_student!.levelUnlocked);
     if (allGamesDone && newStars >= 2) {
       final next = _getNextLevelId(levelId);
       if (next != null) {
         updatedUnlocked[next] = true;
-        debugPrint('ProgressService: niveau débloqué → $next');
+        debugPrint('ProgressService ✅ niveau débloqué → $next');
       }
     }
 
-    // 6. Streak
-    final now     = DateTime.now();
-    final last    = _student!.lastActivity;
-    final diff    = now.difference(last).inDays;
-    final streak  = diff <= 1 ? _student!.currentStreak + 1 : 1;
+    // 6. Streak journalier
+    final now    = DateTime.now();
+    final last   = _student!.lastActivity;
+    final diff   = now.difference(last).inDays;
+    final streak = diff <= 1 ? _student!.currentStreak + 1 : 1;
 
     _student = _student!.copyWith(
-      totalStars: _student!.totalStars + bonusStars,
-      currentStreak: streak,
-      levelStars: updatedLevelStars,
-      levelUnlocked: updatedUnlocked,
-      lastActivity: now,
+      totalStars:     _student!.totalStars + bonusStars,
+      currentStreak:  streak,
+      levelStars:     updatedLevelStars,
+      levelUnlocked:  updatedUnlocked,
+      lastActivity:   now,
       completedGames: updatedCompleted,
     );
 
@@ -237,9 +260,10 @@ class ProgressService extends ChangeNotifier {
     notifyListeners();
   }
 
-  // ─────────────────────────────────────────────
+  // ═══════════════════════════════════════════════════
   // ACCESSEURS
-  // ─────────────────────────────────────────────
+  // ═══════════════════════════════════════════════════
+
   bool isUnlocked(String levelId) {
     if (levelId == 'cp-w1-alpha') return true;
     return _student?.levelUnlocked[levelId] ?? false;
@@ -275,34 +299,44 @@ class ProgressService extends ChangeNotifier {
   List<GameScore> recentScores({int limit = 20}) =>
       _scores.reversed.take(limit).toList();
 
-  // ─────────────────────────────────────────────
-  // ÎLES
-  // ─────────────────────────────────────────────
+  // ═══════════════════════════════════════════════════
+  // ÎLES — construit la liste pour WorldMapScreen
+  // ═══════════════════════════════════════════════════
   List<Island> buildIslands() {
     final total = _student?.totalStars ?? 0;
 
     final configs = [
-      (id:'cp',  label:'CP',  emoji:'🌱',
-       tagline:'L\'alphabet, les couleurs, les animaux !',
-       levels:6, needed:0,
-       ids:['cp-w1-alpha','cp-w2-numbers','cp-w3-colors',
-            'cp-w4-greet','cp-w5-animals1','cp-w6-animals2']),
-      (id:'ce1', label:'CE1', emoji:'🌿',
-       tagline:'La famille, la nourriture, la météo !',
-       levels:3, needed:10,
-       ids:['ce1-t1','ce1-t2','ce1-t3']),
-      (id:'ce2', label:'CE2', emoji:'🌳',
-       tagline:'L\'école, la maison, les verbes !',
-       levels:3, needed:18,
-       ids:['ce2-t1','ce2-t2','ce2-t3']),
-      (id:'cm1', label:'CM1', emoji:'🦋',
-       tagline:'Les émotions, les métiers !',
-       levels:3, needed:27,
-       ids:['cm1-t1','cm1-t2','cm1-t3']),
-      (id:'cm2', label:'CM2', emoji:'🚀',
-       tagline:'Maître du français !',
-       levels:3, needed:36,
-       ids:['cm2-t1','cm2-t2','cm2-t3']),
+      (
+        id: 'cp',  label: 'CP',  emoji: '🌱',
+        tagline: 'L\'alphabet, les couleurs, les animaux !',
+        levels: 6, needed: 0,
+        ids: ['cp-w1-alpha', 'cp-w2-numbers', 'cp-w3-colors',
+              'cp-w4-greet', 'cp-w5-animals1', 'cp-w6-animals2'],
+      ),
+      (
+        id: 'ce1', label: 'CE1', emoji: '🌿',
+        tagline: 'La famille, la nourriture, la météo !',
+        levels: 3, needed: 10,
+        ids: ['ce1-t1', 'ce1-t2', 'ce1-t3'],
+      ),
+      (
+        id: 'ce2', label: 'CE2', emoji: '🌳',
+        tagline: 'L\'école, la maison, les verbes !',
+        levels: 3, needed: 18,
+        ids: ['ce2-t1', 'ce2-t2', 'ce2-t3'],
+      ),
+      (
+        id: 'cm1', label: 'CM1', emoji: '🦋',
+        tagline: 'Les émotions, les métiers !',
+        levels: 3, needed: 27,
+        ids: ['cm1-t1', 'cm1-t2', 'cm1-t3'],
+      ),
+      (
+        id: 'cm2', label: 'CM2', emoji: '🚀',
+        tagline: 'Maître du français !',
+        levels: 3, needed: 36,
+        ids: ['cm2-t1', 'cm2-t2', 'cm2-t3'],
+      ),
     ];
 
     return configs.map((c) {
@@ -311,28 +345,29 @@ class ProgressService extends ChangeNotifier {
         (sum, id) => sum + (_student?.levelStars[id] ?? 0),
       );
       return Island(
-        id: c.id,
-        label: c.label,
-        emoji: c.emoji,
-        tagline: c.tagline,
-        totalLevels: c.levels,
-        isUnlocked: total >= c.needed || c.id == 'cp',
-        starsEarned: earned,
+        id:           c.id,
+        label:        c.label,
+        emoji:        c.emoji,
+        tagline:      c.tagline,
+        totalLevels:  c.levels,
+        isUnlocked:   total >= c.needed || c.id == 'cp',
+        starsEarned:  earned,
         starsToUnlock: c.needed,
       );
     }).toList();
   }
 
-  // ─────────────────────────────────────────────
+  // ═══════════════════════════════════════════════════
   // PRIVÉ
-  // ─────────────────────────────────────────────
+  // ═══════════════════════════════════════════════════
+
   static const _levelOrder = [
-    'cp-w1-alpha','cp-w2-numbers','cp-w3-colors',
-    'cp-w4-greet','cp-w5-animals1','cp-w6-animals2',
-    'ce1-t1','ce1-t2','ce1-t3',
-    'ce2-t1','ce2-t2','ce2-t3',
-    'cm1-t1','cm1-t2','cm1-t3',
-    'cm2-t1','cm2-t2','cm2-t3',
+    'cp-w1-alpha', 'cp-w2-numbers', 'cp-w3-colors',
+    'cp-w4-greet', 'cp-w5-animals1', 'cp-w6-animals2',
+    'ce1-t1', 'ce1-t2', 'ce1-t3',
+    'ce2-t1', 'ce2-t2', 'ce2-t3',
+    'cm1-t1', 'cm1-t2', 'cm1-t3',
+    'cm2-t1', 'cm2-t2', 'cm2-t3',
   ];
 
   String? _getNextLevelId(String current) {
@@ -344,7 +379,8 @@ class ProgressService extends ChangeNotifier {
   Future<void> _saveAll() async {
     final prefs = await SharedPreferences.getInstance();
     if (_student != null) {
-      await prefs.setString(_keyStudent, jsonEncode(_student!.toJson()));
+      await prefs.setString(
+          _keyStudent, jsonEncode(_student!.toJson()));
     }
     await prefs.setString(
       _keyScores,
@@ -382,37 +418,5 @@ class ProgressService extends ChangeNotifier {
     } catch (e) {
       debugPrint('ProgressService sync student fail: $e');
     }
-  }
-  // ─────────────────────────────────────────────
-  // MODIFIER LE PROFIL (nom + avatar)
-  // ─────────────────────────────────────────────
-  Future<void> updateProfile(String name, String avatarEmoji) async {
-    if (_student == null) return;
-    _student = _student!.copyWith(
-      name: name,
-      avatarEmoji: avatarEmoji,
-    );
-    await _saveAll();
-    _trySyncStudent();
-    notifyListeners();
-  }
-
-  // ─────────────────────────────────────────────
-  // RÉINITIALISER LA PROGRESSION
-  // ─────────────────────────────────────────────
-  Future<void> resetProgress() async {
-    if (_student == null) return;
-    // Garder le nom et l'avatar, tout remettre à zéro
-    _student = Student(
-      id: _student!.id,
-      name: _student!.name,
-      avatarEmoji: _student!.avatarEmoji,
-      lastActivity: DateTime.now(),
-      levelUnlocked: {'cp-w1-alpha': true},
-    );
-    _scores.clear();
-    _wordStats.clear();
-    await _saveAll();
-    notifyListeners();
   }
 }

@@ -1,7 +1,4 @@
 // lib/screens/profile_screen.dart
-// Profil élève : avatar, stats, progression par île,
-// historique des parties, modification du nom/avatar.
-
 import 'package:flutter/material.dart';
 import 'dart:math' as math;
 import '../models/student_models.dart';
@@ -17,22 +14,20 @@ class ProfileScreen extends StatefulWidget {
 class _ProfileScreenState extends State<ProfileScreen>
     with TickerProviderStateMixin {
   late AnimationController _bgCtrl;
-  late Animation<double> _bgAnim;
   late AnimationController _cardCtrl;
+  late Animation<double> _bgAnim;
   late Animation<double> _cardAnim;
 
   @override
   void initState() {
     super.initState();
     _bgCtrl = AnimationController(
-      vsync: this,
-      duration: const Duration(seconds: 4),
+      vsync: this, duration: const Duration(seconds: 4),
     )..repeat(reverse: true);
     _bgAnim = CurvedAnimation(parent: _bgCtrl, curve: Curves.easeInOut);
 
     _cardCtrl = AnimationController(
-      vsync: this,
-      duration: const Duration(milliseconds: 700),
+      vsync: this, duration: const Duration(milliseconds: 700),
     )..forward();
     _cardAnim = CurvedAnimation(parent: _cardCtrl, curve: Curves.easeOut);
   }
@@ -52,8 +47,7 @@ class _ProfileScreenState extends State<ProfileScreen>
         final student = ProgressService().student;
         if (student == null) {
           return const Scaffold(
-            body: Center(child: CircularProgressIndicator()),
-          );
+              body: Center(child: CircularProgressIndicator()));
         }
         return Scaffold(
           body: Stack(
@@ -84,6 +78,7 @@ class _ProfileScreenState extends State<ProfileScreen>
                     _buildTopBar(context),
                     Expanded(
                       child: SingleChildScrollView(
+                        physics: const BouncingScrollPhysics(),
                         padding: const EdgeInsets.fromLTRB(20, 0, 20, 30),
                         child: AnimatedBuilder(
                           animation: _cardAnim,
@@ -125,7 +120,6 @@ class _ProfileScreenState extends State<ProfileScreen>
     );
   }
 
-  // ── Barre du haut ─────────────────────────────
   Widget _buildTopBar(BuildContext context) {
     return Padding(
       padding: const EdgeInsets.fromLTRB(16, 12, 16, 16),
@@ -144,20 +138,17 @@ class _ProfileScreenState extends State<ProfileScreen>
             ),
           ),
           const SizedBox(width: 14),
-          const Text(
-            '👤  Mon Profil',
-            style: TextStyle(
-              color: Colors.white,
-              fontSize: 20,
-              fontWeight: FontWeight.w900,
-            ),
-          ),
+          const Text('👤  Mon Profil',
+              style: TextStyle(
+                color: Colors.white,
+                fontSize: 20,
+                fontWeight: FontWeight.w900,
+              )),
         ],
       ),
     );
   }
 
-  // ── Carte avatar + nom ─────────────────────────
   Widget _buildAvatarCard(Student student, BuildContext context) {
     return Container(
       width: double.infinity,
@@ -169,7 +160,6 @@ class _ProfileScreenState extends State<ProfileScreen>
       ),
       child: Column(
         children: [
-          // Avatar avec bouton modifier
           Stack(
             children: [
               Container(
@@ -179,13 +169,10 @@ class _ProfileScreenState extends State<ProfileScreen>
                   shape: BoxShape.circle,
                   border: Border.all(
                       color: Colors.amber.withOpacity(0.6), width: 3),
-                  boxShadow: [
-                    BoxShadow(
-                      color: Colors.amber.withOpacity(0.3),
-                      blurRadius: 20,
-                      spreadRadius: 2,
-                    ),
-                  ],
+                  boxShadow: [BoxShadow(
+                    color: Colors.amber.withOpacity(0.3),
+                    blurRadius: 20, spreadRadius: 2,
+                  )],
                 ),
                 child: Center(
                   child: Text(student.avatarEmoji,
@@ -199,10 +186,8 @@ class _ProfileScreenState extends State<ProfileScreen>
                   child: Container(
                     width: 30, height: 30,
                     decoration: BoxDecoration(
-                      color: Colors.amber,
-                      shape: BoxShape.circle,
-                      border: Border.all(
-                          color: Colors.white, width: 2),
+                      color: Colors.amber, shape: BoxShape.circle,
+                      border: Border.all(color: Colors.white, width: 2),
                     ),
                     child: const Icon(Icons.edit,
                         color: Colors.black87, size: 14),
@@ -212,39 +197,31 @@ class _ProfileScreenState extends State<ProfileScreen>
             ],
           ),
           const SizedBox(height: 14),
-          // Nom
-          Text(
-            student.name,
-            style: const TextStyle(
-              color: Colors.white,
-              fontSize: 26,
-              fontWeight: FontWeight.w900,
-            ),
-          ),
+          Text(student.name,
+              style: const TextStyle(
+                  color: Colors.white,
+                  fontSize: 26,
+                  fontWeight: FontWeight.w900)),
           const SizedBox(height: 6),
-          // Badge niveau
           Container(
             padding: const EdgeInsets.symmetric(
                 horizontal: 16, vertical: 6),
             decoration: BoxDecoration(
               color: Colors.amber.withOpacity(0.25),
               borderRadius: BorderRadius.circular(20),
-              border: Border.all(
-                  color: Colors.amber.withOpacity(0.5)),
+              border: Border.all(color: Colors.amber.withOpacity(0.5)),
             ),
             child: Row(
               mainAxisSize: MainAxisSize.min,
               children: [
-                const Icon(Icons.star,
-                    color: Colors.amber, size: 16),
+                const Icon(Icons.star, color: Colors.amber, size: 16),
                 const SizedBox(width: 6),
                 Text(
                   '${student.totalStars} étoiles  •  ${_getLevelLabel(student)}',
                   style: const TextStyle(
-                    color: Colors.white,
-                    fontSize: 13,
-                    fontWeight: FontWeight.bold,
-                  ),
+                      color: Colors.white,
+                      fontSize: 13,
+                      fontWeight: FontWeight.bold),
                 ),
               ],
             ),
@@ -254,7 +231,6 @@ class _ProfileScreenState extends State<ProfileScreen>
     );
   }
 
-  // ── Ligne de stats ─────────────────────────────
   Widget _buildStatsRow(Student student) {
     final scores = ProgressService().allScores;
     final totalGames = scores.length;
@@ -263,79 +239,50 @@ class _ProfileScreenState extends State<ProfileScreen>
         : (scores.map((s) => s.percentage).reduce((a, b) => a + b) /
                 scores.length)
             .round();
-    final completedLevels = student.levelStars.values
-        .where((s) => s > 0)
-        .length;
+    final completedLevels =
+        student.levelStars.values.where((s) => s > 0).length;
 
     return Row(
       children: [
-        _StatCard(
-          emoji: '🎮',
-          value: '$totalGames',
-          label: 'Parties jouées',
-          color: const Color(0xFF1565C0),
-        ),
+        _StatCard(emoji: '🎮', value: '$totalGames',
+            label: 'Parties', color: const Color(0xFF1565C0)),
         const SizedBox(width: 10),
-        _StatCard(
-          emoji: '📊',
-          value: '$avgScore%',
-          label: 'Score moyen',
-          color: const Color(0xFF2E7D32),
-        ),
+        _StatCard(emoji: '📊', value: '$avgScore%',
+            label: 'Moy. score', color: const Color(0xFF2E7D32)),
         const SizedBox(width: 10),
-        _StatCard(
-          emoji: '🏆',
-          value: '$completedLevels',
-          label: 'Niveaux faits',
-          color: const Color(0xFF6A1B9A),
-        ),
+        _StatCard(emoji: '🏆', value: '$completedLevels',
+            label: 'Niveaux', color: const Color(0xFF6A1B9A)),
       ],
     );
   }
 
-  // ── Carte streak ───────────────────────────────
   Widget _buildStreakCard(Student student) {
+    final isHot = student.currentStreak >= 3;
     return Container(
       width: double.infinity,
       padding: const EdgeInsets.all(18),
       decoration: BoxDecoration(
-        gradient: LinearGradient(
-          colors: student.currentStreak >= 3
-              ? [const Color(0xFFE65100), const Color(0xFFFF7043)]
-              : [
-                  Colors.white.withOpacity(0.1),
-                  Colors.white.withOpacity(0.06),
-                ],
-          begin: Alignment.topLeft,
-          end: Alignment.bottomRight,
-        ),
+        gradient: isHot
+            ? const LinearGradient(
+                colors: [Color(0xFFE65100), Color(0xFFFF7043)],
+                begin: Alignment.topLeft, end: Alignment.bottomRight)
+            : null,
+        color: isHot ? null : Colors.white.withOpacity(0.1),
         borderRadius: BorderRadius.circular(20),
         border: Border.all(
-          color: student.currentStreak >= 3
+          color: isHot
               ? Colors.orange.withOpacity(0.5)
               : Colors.white.withOpacity(0.15),
         ),
-        boxShadow: student.currentStreak >= 3
-            ? [
-                BoxShadow(
-                  color: Colors.orange.withOpacity(0.3),
-                  blurRadius: 12,
-                  offset: const Offset(0, 4),
-                ),
-              ]
+        boxShadow: isHot
+            ? [BoxShadow(
+                color: Colors.orange.withOpacity(0.3),
+                blurRadius: 12, offset: const Offset(0, 4))]
             : [],
       ),
       child: Row(
         children: [
-          // Flamme animée
-          TweenAnimationBuilder<double>(
-            tween: Tween(begin: 0.9, end: 1.1),
-            duration: const Duration(milliseconds: 800),
-            builder: (_, v, child) =>
-                Transform.scale(scale: v, child: child),
-            child: const Text('🔥',
-                style: TextStyle(fontSize: 36)),
-          ),
+          const Text('🔥', style: TextStyle(fontSize: 36)),
           const SizedBox(width: 14),
           Expanded(
             child: Column(
@@ -344,10 +291,9 @@ class _ProfileScreenState extends State<ProfileScreen>
                 Text(
                   '${student.currentStreak} jour${student.currentStreak > 1 ? 's' : ''} de suite !',
                   style: const TextStyle(
-                    color: Colors.white,
-                    fontSize: 18,
-                    fontWeight: FontWeight.w900,
-                  ),
+                      color: Colors.white,
+                      fontSize: 18,
+                      fontWeight: FontWeight.w900),
                 ),
                 Text(
                   student.currentStreak == 0
@@ -364,17 +310,13 @@ class _ProfileScreenState extends State<ProfileScreen>
               ],
             ),
           ),
-          // Mini-calendrier streak
           Column(
             children: [
-              Text(
-                '${student.currentStreak}',
-                style: const TextStyle(
-                  color: Colors.amber,
-                  fontSize: 32,
-                  fontWeight: FontWeight.w900,
-                ),
-              ),
+              Text('${student.currentStreak}',
+                  style: const TextStyle(
+                      color: Colors.amber,
+                      fontSize: 32,
+                      fontWeight: FontWeight.w900)),
               Text('jours',
                   style: TextStyle(
                       color: Colors.white.withOpacity(0.7),
@@ -386,10 +328,8 @@ class _ProfileScreenState extends State<ProfileScreen>
     );
   }
 
-  // ── Progression par île ────────────────────────
   Widget _buildIslandProgress(Student student) {
     final islands = ProgressService().buildIslands();
-
     return Container(
       padding: const EdgeInsets.all(18),
       decoration: BoxDecoration(
@@ -404,14 +344,11 @@ class _ProfileScreenState extends State<ProfileScreen>
             children: [
               Text('🗺️', style: TextStyle(fontSize: 20)),
               SizedBox(width: 8),
-              Text(
-                'Progression par île',
-                style: TextStyle(
-                  color: Colors.white,
-                  fontSize: 16,
-                  fontWeight: FontWeight.bold,
-                ),
-              ),
+              Text('Progression par île',
+                  style: TextStyle(
+                      color: Colors.white,
+                      fontSize: 16,
+                      fontWeight: FontWeight.bold)),
             ],
           ),
           const SizedBox(height: 14),
@@ -421,7 +358,6 @@ class _ProfileScreenState extends State<ProfileScreen>
     );
   }
 
-  // ── Scores récents ─────────────────────────────
   Widget _buildRecentScores() {
     final scores = ProgressService().recentScores(limit: 5);
     if (scores.isEmpty) return const SizedBox.shrink();
@@ -440,14 +376,11 @@ class _ProfileScreenState extends State<ProfileScreen>
             children: [
               Text('🕐', style: TextStyle(fontSize: 20)),
               SizedBox(width: 8),
-              Text(
-                'Dernières parties',
-                style: TextStyle(
-                  color: Colors.white,
-                  fontSize: 16,
-                  fontWeight: FontWeight.bold,
-                ),
-              ),
+              Text('Dernières parties',
+                  style: TextStyle(
+                      color: Colors.white,
+                      fontSize: 16,
+                      fontWeight: FontWeight.bold)),
             ],
           ),
           const SizedBox(height: 12),
@@ -457,20 +390,17 @@ class _ProfileScreenState extends State<ProfileScreen>
     );
   }
 
-  // ── Actions ────────────────────────────────────
   Widget _buildActions(BuildContext context) {
     return Column(
       children: [
-        // Bouton modifier profil
         _ActionButton(
           icon: Icons.edit,
           label: 'Modifier mon profil',
           color: const Color(0xFF1565C0),
-          onTap: () => _editProfile(
-              context, ProgressService().student!),
+          onTap: () =>
+              _editProfile(context, ProgressService().student!),
         ),
         const SizedBox(height: 10),
-        // Bouton réinitialiser progression
         _ActionButton(
           icon: Icons.refresh,
           label: 'Réinitialiser la progression',
@@ -481,9 +411,9 @@ class _ProfileScreenState extends State<ProfileScreen>
     );
   }
 
-  // ── Modifier le profil ─────────────────────────
   void _editProfile(BuildContext context, Student student) {
-    final nameCtrl = TextEditingController(text: student.name);
+    final nameCtrl =
+        TextEditingController(text: student.name);
     String selectedAvatar = student.avatarEmoji;
 
     const avatars = [
@@ -495,7 +425,7 @@ class _ProfileScreenState extends State<ProfileScreen>
     showDialog(
       context: context,
       builder: (_) => StatefulBuilder(
-        builder: (ctx, setDialogState) => Dialog(
+        builder: (ctx, setS) => Dialog(
           backgroundColor: Colors.transparent,
           child: Container(
             padding: const EdgeInsets.all(24),
@@ -518,18 +448,15 @@ class _ProfileScreenState extends State<ProfileScreen>
                         fontSize: 18,
                         fontWeight: FontWeight.bold)),
                 const SizedBox(height: 16),
-                // Avatar sélectionné
                 Text(selectedAvatar,
                     style: const TextStyle(fontSize: 56)),
                 const SizedBox(height: 10),
-                // Grille avatars
                 Wrap(
                   spacing: 8, runSpacing: 8,
                   children: avatars.map((a) {
                     final isSel = a == selectedAvatar;
                     return GestureDetector(
-                      onTap: () =>
-                          setDialogState(() => selectedAvatar = a),
+                      onTap: () => setS(() => selectedAvatar = a),
                       child: AnimatedContainer(
                         duration: const Duration(milliseconds: 200),
                         width: 46, height: 46,
@@ -547,15 +474,13 @@ class _ProfileScreenState extends State<ProfileScreen>
                         ),
                         child: Center(
                           child: Text(a,
-                              style: const TextStyle(
-                                  fontSize: 24)),
+                              style: const TextStyle(fontSize: 24)),
                         ),
                       ),
                     );
                   }).toList(),
                 ),
                 const SizedBox(height: 14),
-                // Champ nom
                 Container(
                   decoration: BoxDecoration(
                     color: Colors.white.withOpacity(0.1),
@@ -568,7 +493,8 @@ class _ProfileScreenState extends State<ProfileScreen>
                     style: const TextStyle(color: Colors.white),
                     decoration: const InputDecoration(
                       labelText: 'Ton prénom',
-                      labelStyle: TextStyle(color: Colors.white60),
+                      labelStyle:
+                          TextStyle(color: Colors.white60),
                       prefixIcon: Icon(Icons.person_outline,
                           color: Colors.white60, size: 20),
                       border: InputBorder.none,
@@ -594,7 +520,6 @@ class _ProfileScreenState extends State<ProfileScreen>
                         onPressed: () async {
                           final name = nameCtrl.text.trim();
                           if (name.isEmpty) return;
-                          // Sauvegarder les modifications
                           await ProgressService()
                               .updateProfile(name, selectedAvatar);
                           if (ctx.mounted) Navigator.pop(ctx);
@@ -621,7 +546,6 @@ class _ProfileScreenState extends State<ProfileScreen>
     );
   }
 
-  // ── Confirmer réinitialisation ─────────────────
   void _confirmReset(BuildContext context) {
     showDialog(
       context: context,
@@ -636,7 +560,8 @@ class _ProfileScreenState extends State<ProfileScreen>
               end: Alignment.bottomRight,
             ),
             borderRadius: BorderRadius.circular(24),
-            border: Border.all(color: Colors.red.withOpacity(0.3)),
+            border:
+                Border.all(color: Colors.red.withOpacity(0.3)),
           ),
           child: Column(
             mainAxisSize: MainAxisSize.min,
@@ -685,7 +610,8 @@ class _ProfileScreenState extends State<ProfileScreen>
                         backgroundColor: Colors.white,
                         foregroundColor: Colors.red[700],
                         shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(10)),
+                            borderRadius:
+                                BorderRadius.circular(10)),
                       ),
                       child: const Text('Réinitialiser',
                           style: TextStyle(
@@ -701,7 +627,6 @@ class _ProfileScreenState extends State<ProfileScreen>
     );
   }
 
-  // ── Helpers ───────────────────────────────────
   String _getLevelLabel(Student student) {
     final s = student.totalStars;
     if (s >= 36) return 'CM2 🚀';
@@ -713,8 +638,6 @@ class _ProfileScreenState extends State<ProfileScreen>
 }
 
 // ─────────────────────────────────────────────────────────────
-// Widgets internes
-// ─────────────────────────────────────────────────────────────
 class _StatCard extends StatelessWidget {
   final String emoji, value, label;
   final Color color;
@@ -722,7 +645,6 @@ class _StatCard extends StatelessWidget {
     required this.emoji, required this.value,
     required this.label, required this.color,
   });
-
   @override
   Widget build(BuildContext context) => Expanded(
         child: Container(
@@ -737,13 +659,10 @@ class _StatCard extends StatelessWidget {
               Text(emoji, style: const TextStyle(fontSize: 26)),
               const SizedBox(height: 4),
               Text(value,
-                  style: TextStyle(
-                    color: color == const Color(0xFF2E7D32)
-                        ? Colors.greenAccent
-                        : Colors.white,
-                    fontSize: 18,
-                    fontWeight: FontWeight.w900,
-                  )),
+                  style: const TextStyle(
+                      color: Colors.white,
+                      fontSize: 18,
+                      fontWeight: FontWeight.w900)),
               Text(label,
                   textAlign: TextAlign.center,
                   style: TextStyle(
@@ -769,9 +688,8 @@ class _IslandRow extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final color = _colors[island.label] ?? Colors.grey;
+    final color  = _colors[island.label] ?? Colors.grey;
     final locked = !island.isUnlocked;
-
     return Padding(
       padding: const EdgeInsets.only(bottom: 12),
       child: Row(
@@ -781,12 +699,11 @@ class _IslandRow extends StatelessWidget {
           const SizedBox(width: 10),
           Text(island.label,
               style: TextStyle(
-                color: locked
-                    ? Colors.white.withOpacity(0.4)
-                    : Colors.white,
-                fontWeight: FontWeight.bold,
-                fontSize: 14,
-              )),
+                  color: locked
+                      ? Colors.white.withOpacity(0.4)
+                      : Colors.white,
+                  fontWeight: FontWeight.bold,
+                  fontSize: 14)),
           const SizedBox(width: 10),
           Expanded(
             child: ClipRRect(
@@ -806,12 +723,11 @@ class _IslandRow extends StatelessWidget {
                 ? '🔒 ${island.starsToUnlock}⭐'
                 : '${island.starsEarned}/${island.totalLevels * 3}⭐',
             style: TextStyle(
-              color: locked
-                  ? Colors.white.withOpacity(0.3)
-                  : Colors.amber,
-              fontSize: 11,
-              fontWeight: FontWeight.bold,
-            ),
+                color: locked
+                    ? Colors.white.withOpacity(0.3)
+                    : Colors.amber,
+                fontSize: 11,
+                fontWeight: FontWeight.bold),
           ),
         ],
       ),
@@ -822,7 +738,6 @@ class _IslandRow extends StatelessWidget {
 class _ScoreRow extends StatelessWidget {
   final GameScore score;
   const _ScoreRow({required this.score});
-
   @override
   Widget build(BuildContext context) {
     const emojis = {
@@ -834,7 +749,6 @@ class _ScoreRow extends StatelessWidget {
         : score.percentage >= 60
             ? Colors.amber
             : Colors.redAccent;
-
     return Padding(
       padding: const EdgeInsets.only(bottom: 8),
       child: Row(
@@ -860,10 +774,12 @@ class _ScoreRow extends StatelessWidget {
                         color: Colors.white,
                         fontSize: 12,
                         fontWeight: FontWeight.w600)),
-                Text('${score.durationSeconds}s  •  ${score.errorsCount} erreur(s)',
-                    style: TextStyle(
-                        color: Colors.white.withOpacity(0.5),
-                        fontSize: 10)),
+                Text(
+                  '${score.durationSeconds}s  •  ${score.errorsCount} erreur(s)',
+                  style: TextStyle(
+                      color: Colors.white.withOpacity(0.5),
+                      fontSize: 10),
+                ),
               ],
             ),
           ),
@@ -902,7 +818,6 @@ class _ActionButton extends StatelessWidget {
     required this.icon, required this.label,
     required this.color, required this.onTap,
   });
-
   @override
   Widget build(BuildContext context) => GestureDetector(
         onTap: onTap,
