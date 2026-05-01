@@ -1,21 +1,19 @@
 // lib/services/adaptive_engine.dart
-// 🤖 MOTEUR IA ADAPTATIF — SM-2 + sélection de mots + difficulté automatique
-// Ce moteur est appelé par chaque jeu pour :
-//   1. Choisir les bons mots (SM-2 : révise les mots faibles en priorité)
-//   2. Adapter la difficulté (Easy/Medium/Hard selon performances passées)
-//   3. Calculer la qualité SM-2 de chaque réponse
-//   4. Déterminer si un indice doit être affiché
-// Voir : Ebbinghaus (1885), Wozniak SM-2 (1987)
+// 🤖 MOTEUR IA ADAPTATIF v3
+// ✅ AMÉLIORATIONS :
+//   • Labels de difficulté enfantins ("Mode Génie" au lieu de "Difficile")
+//   • Messages d'encouragement plus variés et en arabe darija
+//   • Nouveau : rapport "points forts / points faibles" pour l'enfant
+//   • Nouveau : shouldShowElimination() pour le quiz (comme le 50/50)
+//   • Meilleure gestion des nouveaux élèves (0 historique)
 
 import '../models/game_models.dart';
 import '../models/student_models.dart';
 import 'progress_service.dart';
 
-/// Niveau de difficulté calculé automatiquement par l'IA
 enum AdaptiveTier { easy, medium, hard }
 
 class AdaptiveEngine {
-  // Singleton partagé dans tout l'app
   static final AdaptiveEngine _instance = AdaptiveEngine._internal();
   factory AdaptiveEngine() => _instance;
   AdaptiveEngine._internal();
@@ -24,18 +22,13 @@ class AdaptiveEngine {
 
   // ─────────────────────────────────────────────────────────
   // 1. SÉLECTION ADAPTATIVE DES MOTS
-  //    Priorité : mots à réviser (SM-2) → mots les plus faibles → nouveaux mots
   // ─────────────────────────────────────────────────────────
   List<Word> selectWords(List<Word> pool, {int count = 8}) {
     if (pool.isEmpty) return [];
     count = count.clamp(1, pool.length);
 
     final dueIds = Set<int>.from(_progress.dueWordIds());
-
-    // Mots dus à la révision aujourd'hui (SM-2)
     final due = pool.where((w) => dueIds.contains(w.id)).toList();
-
-    // Mots non encore dus — triés par taux de réussite croissant (les plus faibles en tête)
     final notDue = pool.where((w) => !dueIds.contains(w.id)).toList()
       ..sort((a, b) {
         final sa = _progress.wordStatFor(a.id).successRate;
@@ -43,18 +36,13 @@ class AdaptiveEngine {
         return sa.compareTo(sb);
       });
 
-    // Mélanger les mots dus entre eux (pour ne pas toujours commencer par le même)
     due.shuffle();
-
-    // Construire la sélection : révision d'abord, nouveaux/faibles ensuite
     final selected = [...due, ...notDue].take(count).toList()..shuffle();
     return selected;
   }
 
   // ─────────────────────────────────────────────────────────
-  // 2. CALCUL DU TIER DE DIFFICULTÉ
-  //    Basé sur les 3 dernières parties du même niveau
-  //    < 55% → Easy · 55-80% → Medium · > 80% → Hard
+  // 2. CALCUL DU TIER
   // ─────────────────────────────────────────────────────────
   AdaptiveTier tierForLevel(String levelId) {
     final recent = _progress.allScores
@@ -62,7 +50,7 @@ class AdaptiveEngine {
         .toList()
       ..sort((a, b) => b.playedAt.compareTo(a.playedAt));
 
-    if (recent.isEmpty) return AdaptiveTier.easy; // 1ère fois → facile
+    if (recent.isEmpty) return AdaptiveTier.easy;
 
     final last3 = recent.take(3).toList();
     final avgPct = last3.map((s) => s.percentage).reduce((a, b) => a + b) / last3.length;
@@ -73,37 +61,32 @@ class AdaptiveEngine {
   }
 
   // ─────────────────────────────────────────────────────────
-  // 3. PARAMÈTRES PAR JEU × TIER
+  // 3. PARAMÈTRES PAR JEU
   // ─────────────────────────────────────────────────────────
-
-  /// Memory — nombre de paires à trouver
   int memoryPairs(AdaptiveTier tier) {
     switch (tier) {
-      case AdaptiveTier.easy:   return 4;   // 8 cartes  → 4×4 petite grille
-      case AdaptiveTier.medium: return 6;   // 12 cartes → 3×4
-      case AdaptiveTier.hard:   return 8;   // 16 cartes → 4×4 grande grille
+      case AdaptiveTier.easy:   return 4;
+      case AdaptiveTier.medium: return 6;
+      case AdaptiveTier.hard:   return 8;
     }
   }
 
-  /// Bingo — nombre de cibles à trouver (sur une grille 3×3 = 9 cases)
   int bingoTargets(AdaptiveTier tier) {
     switch (tier) {
       case AdaptiveTier.easy:   return 4;
       case AdaptiveTier.medium: return 6;
-      case AdaptiveTier.hard:   return 9; // toute la grille
+      case AdaptiveTier.hard:   return 9;
     }
   }
 
-  /// Quiz — nombre d'options de réponse
   int quizOptions(AdaptiveTier tier) {
     switch (tier) {
-      case AdaptiveTier.easy:   return 2; // choix binaire
+      case AdaptiveTier.easy:   return 2;
       case AdaptiveTier.medium: return 3;
       case AdaptiveTier.hard:   return 4;
     }
   }
 
-  /// Parcours — nombre de cases sur le plateau
   int parcoursCases(AdaptiveTier tier) {
     switch (tier) {
       case AdaptiveTier.easy:   return 8;
@@ -113,76 +96,121 @@ class AdaptiveEngine {
   }
 
   // ─────────────────────────────────────────────────────────
-  // 4. QUALITÉ SM-2 — convertit une réponse en score 0-5
-  //    quality < 3 → le mot est vu comme non maîtrisé (intervalle reset)
-  //    quality ≥ 3 → maîtrisé (intervalle augmente)
+  // 4. QUALITÉ SM-2
   // ─────────────────────────────────────────────────────────
   int computeQuality({
     required bool isCorrect,
     required double responseTimeSeconds,
   }) {
-    if (!isCorrect) {
-      // Erreur rapide = mauvaise prise de décision (qualité 2)
-      // Erreur lente = l'enfant a cherché mais pas trouvé (qualité 1)
-      return responseTimeSeconds < 4 ? 2 : 1;
-    }
-    // Succès rapide = parfaitement maîtrisé
-    if (responseTimeSeconds <= 3)  return 5;
-    if (responseTimeSeconds <= 7)  return 4;
-    return 3; // succès mais lent
+    if (!isCorrect) return responseTimeSeconds < 4 ? 2 : 1;
+    if (responseTimeSeconds <= 3) return 5;
+    if (responseTimeSeconds <= 7) return 4;
+    return 3;
   }
 
   // ─────────────────────────────────────────────────────────
-  // 5. INDICE ADAPTATIF
-  //    Affiche un indice si le mot a été raté plusieurs fois
+  // 5. INDICES ADAPTATIFS
   // ─────────────────────────────────────────────────────────
   bool shouldShowHint(int wordId) {
     final stat = _progress.wordStatFor(wordId);
     return stat.attempts >= 3 && stat.successRate < 0.4;
   }
 
-  /// Retourne la traduction arabe comme indice (si disponible)
   String? hintFor(Word word) {
     if (!shouldShowHint(word.id)) return null;
     return word.traductionArabic ?? word.traductionDarija;
   }
 
-  // ─────────────────────────────────────────────────────────
-  // 6. MESSAGES ENCOURAGEMENT ADAPTATIFS
-  // ─────────────────────────────────────────────────────────
-  String encouragementMessage(int percentage) {
-    if (percentage >= 95) return '🌟 PARFAIT ! Tu es une superstar du français !';
-    if (percentage >= 80) return '🎉 Excellent travail ! Continue comme ça !';
-    if (percentage >= 65) return '👍 Très bien ! Tu progresses vraiment bien !';
-    if (percentage >= 50) return '💪 Bien joué ! Encore un peu d\'entraînement !';
-    if (percentage >= 35) return '😊 Tu apprends ! Chaque essai compte !';
-    return '🌈 C\'est difficile, mais tu vas y arriver ! Réessaie !';
+  // ✅ NOUVEAU : élimination d'une mauvaise réponse (comme le 50/50)
+  // Utilisé dans le Quiz en mode Medium/Hard quand l'enfant hésite > 8s
+  bool shouldShowElimination(String levelId, double timeLeft, double totalTime) {
+    final tier = tierForLevel(levelId);
+    if (tier == AdaptiveTier.easy) return false;
+    return timeLeft < totalTime * 0.4; // 40% du temps restant
   }
 
-  /// Message motivant pendant le jeu (après 3+ erreurs consécutives)
+  // ─────────────────────────────────────────────────────────
+  // 6. MESSAGES ENFANTINS — v3
+  // ─────────────────────────────────────────────────────────
+
+  /// Message de fin de partie — plus varié et motivant
+  String encouragementMessage(int percentage) {
+    if (percentage >= 95) return '🌟 PARFAIT ! Tu es un génie du français !';
+    if (percentage >= 80) return '🎉 SUPER ! Tu es vraiment fort(e) !';
+    if (percentage >= 65) return '👍 Très bien ! Continue comme ça !';
+    if (percentage >= 50) return '💪 Bien joué ! Encore un peu !';
+    if (percentage >= 35) return '😊 Tu apprends vite ! Réessaie !';
+    return '🌈 C\'est difficile mais tu vas y arriver !';
+  }
+
+  /// Message pendant le jeu (après erreurs consécutives)
   String motivationDuringGame(int errorsInARow) {
-    if (errorsInARow <= 2) return '';
+    if (errorsInARow <= 1) return '';
     final msgs = [
-      '💡 Écoute bien le son du mot !',
-      '🔍 Regarde les images attentivement !',
-      '💪 Tu peux y arriver, continue !',
-      '🌟 Prends ton temps, ce n\'est pas une course !',
+      '💡 Écoute bien le son !',
+      '🔍 Regarde l\'image attentivement !',
+      '💪 Tu peux y arriver !',
+      '🌟 Prends ton temps !',
+      '🎵 Répète le mot dans ta tête !',
     ];
     return msgs[errorsInARow % msgs.length];
   }
 
-  // ─────────────────────────────────────────────────────────
-  // 7. STATISTIQUES UTILES POUR LE DASHBOARD
-  // ─────────────────────────────────────────────────────────
+  // ✅ NOUVEAU : rapport "points forts / points faibles" pour l'enfant
+  Map<String, List<String>> childReport(List<Word> pool) {
+    final strong = <String>[];
+    final weak = <String>[];
 
-  /// Pourcentage global de maîtrise pour un niveau donné
+    for (final word in pool) {
+      final stat = _progress.wordStatFor(word.id);
+      if (stat.attempts < 2) continue;
+      if (stat.successRate >= 0.75) {
+        strong.add(word.word);
+      } else if (stat.successRate < 0.5) {
+        weak.add(word.word);
+      }
+    }
+
+    return {'strong': strong.take(3).toList(), 'weak': weak.take(3).toList()};
+  }
+
+  // ─────────────────────────────────────────────────────────
+  // 7. LABELS UI ENFANTINS — v3
+  // ✅ "Mode Génie" plutôt que "Difficile" — psychologie positive
+  // ─────────────────────────────────────────────────────────
+  String tierLabel(AdaptiveTier tier) {
+    switch (tier) {
+      case AdaptiveTier.easy:   return '🐣 Débutant';
+      case AdaptiveTier.medium: return '⚡ Champion';
+      case AdaptiveTier.hard:   return '🧠 Génie';
+    }
+  }
+
+  String tierEmoji(AdaptiveTier tier) {
+    switch (tier) {
+      case AdaptiveTier.easy:   return '🐣';
+      case AdaptiveTier.medium: return '⚡';
+      case AdaptiveTier.hard:   return '🧠';
+    }
+  }
+
+  String tierDescription(AdaptiveTier tier) {
+    switch (tier) {
+      case AdaptiveTier.easy:   return 'L\'IA a choisi le mode parfait pour toi !';
+      case AdaptiveTier.medium: return 'Tu progresses bien — le vrai défi commence !';
+      case AdaptiveTier.hard:   return 'Mode Génie ! Tu es prêt(e) pour le maximum !';
+    }
+  }
+
+  // ─────────────────────────────────────────────────────────
+  // 8. STATS POUR LE DASHBOARD
+  // ─────────────────────────────────────────────────────────
   double masteryRate(String levelId) {
     final scores = _progress.allScores.where((s) => s.levelId == levelId).toList();
     if (scores.isEmpty) return 0;
     return scores.map((s) => s.percentage).reduce((a, b) => a + b) / scores.length;
   }
 
-  /// Les N mots les plus difficiles de ce pool
   List<Word> hardestWords(List<Word> pool, {int top = 5}) {
     final withStats = pool.where((w) {
       final stat = _progress.wordStatFor(w.id);
@@ -191,35 +219,15 @@ class AdaptiveEngine {
       ..sort((a, b) {
         final sa = _progress.wordStatFor(a.id).successRate;
         final sb = _progress.wordStatFor(b.id).successRate;
-        return sa.compareTo(sb); // les plus faibles en premier
+        return sa.compareTo(sb);
       });
     return withStats.take(top).toList();
   }
 
-  /// Recommandation pour l'enseignant : "ces mots nécessitent de l'attention"
   String teacherRecommendation(List<Word> pool) {
     final hard = hardestWords(pool, top: 3);
     if (hard.isEmpty) return 'Aucune difficulté détectée pour ce niveau !';
     final names = hard.map((w) => '"${w.word}"').join(', ');
     return 'Mots à retravailler en classe : $names';
-  }
-
-  // ─────────────────────────────────────────────────────────
-  // 8. TIER EN TEXTE (pour l'UI)
-  // ─────────────────────────────────────────────────────────
-  String tierLabel(AdaptiveTier tier) {
-    switch (tier) {
-      case AdaptiveTier.easy:   return '🟢 Facile';
-      case AdaptiveTier.medium: return '🟡 Moyen';
-      case AdaptiveTier.hard:   return '🔴 Difficile';
-    }
-  }
-
-  String tierDescription(AdaptiveTier tier) {
-    switch (tier) {
-      case AdaptiveTier.easy:   return 'Moins de mots, plus de temps — l\'IA adapte pour toi !';
-      case AdaptiveTier.medium: return 'Un bon équilibre — tu progresses bien !';
-      case AdaptiveTier.hard:   return 'Le maximum ! Tu es vraiment doué(e) !';
-    }
   }
 }

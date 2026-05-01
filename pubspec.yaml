@@ -2,7 +2,7 @@ name: linguakids_maroc
 description: Application Flutter pour apprendre le français aux élèves du primaire marocain.
 
 publish_to: "none"
-version: 2.0.0+1
+version: 3.0.0+1
 
 environment:
   sdk: ">=3.0.0 <4.0.0"
@@ -15,7 +15,6 @@ dependencies:
   # ── Audio ──────────────────────────────────────
   speech_to_text: ^6.6.0
   flutter_tts: ^4.2.5
-  # ✅ NOUVEAU : effets sonores + musique de fond
   audioplayers: ^6.1.0
 
   # ── Permissions ────────────────────────────────
@@ -40,6 +39,9 @@ dependencies:
   # ── UI ─────────────────────────────────────────
   cupertino_icons: ^1.0.2
 
+  # ── NOUVEAU : Police Nunito (plus enfantine) ───
+  google_fonts: ^6.2.1
+
 dev_dependencies:
   flutter_test:
     sdk: flutter
@@ -57,9 +59,11 @@ flutter:
     - assets/images/cm2/
 
     # ── Sons : effets ────────────────────────────
-    # ✅ NOUVEAU : effets sonores courts
     - assets/sounds/sfx/
 
     # ── Sons : musique de fond ───────────────────
-    # ✅ NOUVEAU : musiques en boucle par écran
     - assets/sounds/music/
+
+    # ── Sons : mots en darija ────────────────────
+    # Enregistrements natifs (ex: assets/sounds/words/chat.mp3)
+    - assets/sounds/words/
