@@ -4,6 +4,8 @@ import 'dart:math' as math;
 import '../models/student_models.dart';
 import '../services/progress_service.dart';
 import '../services/tts_service.dart';
+import 'stats_screen.dart';
+
 
 class ProfileScreen extends StatefulWidget {
   const ProfileScreen({super.key});
@@ -389,27 +391,48 @@ class _ProfileScreenState extends State<ProfileScreen>
       ),
     );
   }
-
   Widget _buildActions(BuildContext context) {
-    return Column(
-      children: [
-        _ActionButton(
-          icon: Icons.edit,
-          label: 'Modifier mon profil',
-          color: const Color(0xFF1565C0),
-          onTap: () =>
-              _editProfile(context, ProgressService().student!),
+  return Column(
+    children: [
+      // ── Bouton Statistiques ────────────────────
+      _ActionButton(
+        icon: Icons.bar_chart,
+        label: '📊 Voir mes statistiques',
+        color: const Color(0xFF6A1B9A),
+        onTap: () => Navigator.push(
+          context,
+          PageRouteBuilder(
+            pageBuilder: (_, anim, __) => const StatsScreen(),
+            transitionsBuilder: (_, anim, __, child) =>
+                SlideTransition(
+                  position: Tween<Offset>(
+                    begin: const Offset(1, 0),
+                    end: Offset.zero,
+                  ).animate(CurvedAnimation(
+                      parent: anim, curve: Curves.easeOut)),
+                  child: child,
+                ),
+            transitionDuration: const Duration(milliseconds: 350),
+          ),
         ),
-        const SizedBox(height: 10),
-        _ActionButton(
-          icon: Icons.refresh,
-          label: 'Réinitialiser la progression',
-          color: Colors.red[700]!,
-          onTap: () => _confirmReset(context),
-        ),
-      ],
-    );
-  }
+      ),
+      const SizedBox(height: 10),
+      _ActionButton(
+        icon: Icons.edit,
+        label: 'Modifier mon profil',
+        color: const Color(0xFF1565C0),
+        onTap: () => _editProfile(context, ProgressService().student!),
+      ),
+      const SizedBox(height: 10),
+      _ActionButton(
+        icon: Icons.refresh,
+        label: 'Réinitialiser la progression',
+        color: Colors.red[700]!,
+        onTap: () => _confirmReset(context),
+      ),
+    ],
+  );
+}
 
   void _editProfile(BuildContext context, Student student) {
     final nameCtrl =
