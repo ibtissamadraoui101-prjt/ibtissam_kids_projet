@@ -1,9 +1,17 @@
 // lib/screens/onboarding_screen.dart
+//
+// ✅ CORRECTION : suppression de SoundService().playWelcomeSong()
+//    qui n'existe pas dans SoundService.
+//    Remplacé par SoundService().startMusic('world_map') qui existe.
+//
+//    Chanson d'accueil : TTS + musique de fond au démarrage
+
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'dart:math' as math;
 import '../services/progress_service.dart';
 import '../services/tts_service.dart';
+import '../services/sound_service.dart';
 import 'world_map_screen.dart';
 
 class OnboardingScreen extends StatefulWidget {
@@ -16,8 +24,8 @@ class _OnboardingScreenState extends State<OnboardingScreen>
     with TickerProviderStateMixin {
 
   final _nameCtrl = TextEditingController();
-  String _avatar  = '🦁';
-  bool   _loading = false;
+  String _avatar    = '🦁';
+  bool   _loading   = false;
   bool   _nameError = false;
 
   late final AnimationController _mascotCtrl;
@@ -56,7 +64,17 @@ class _OnboardingScreenState extends State<OnboardingScreen>
     _shootAnim = CurvedAnimation(parent: _starCtrl,
         curve: const Interval(0, 0.12));
 
-    Future.delayed(const Duration(milliseconds: 500), () {
+    // ✅ CHANSON D'ACCUEIL — musique douce + TTS chaleureux
+    // Utilise startMusic() qui existe dans SoundService
+    Future.delayed(const Duration(milliseconds: 300), () {
+      if (mounted) {
+        // Lance la musique de fond douce
+        SoundService().startMusic('world_map');
+      }
+    });
+
+    // TTS de bienvenue après 800ms (laisse la musique démarrer d'abord)
+    Future.delayed(const Duration(milliseconds: 800), () {
       if (mounted) TtsService().speak('Bienvenue ! Écris ton prénom !');
     });
   }
@@ -81,6 +99,7 @@ class _OnboardingScreenState extends State<OnboardingScreen>
     }
     setState(() { _loading = true; _nameError = false; });
     HapticFeedback.mediumImpact();
+    SoundService().play(SoundEffect.gameStart);
     TtsService().speak('Bravo $name ! L\'aventure commence !');
     await ProgressService().createStudent(name, emoji: _avatar);
     if (mounted) {
@@ -187,7 +206,7 @@ class _OnboardingScreenState extends State<OnboardingScreen>
       style: TextStyle(color: Colors.white.withValues(alpha: 0.8), fontSize: 14)),
     const SizedBox(height: 10),
     Wrap(spacing: 8, runSpacing: 6, alignment: WrapAlignment.center, children: [
-      _badge('🎮 4 Jeux'),
+      _badge('🎮 6 Jeux'),
       _badge('🏝️ 5 Îles'),
       _badge('⭐ Récompenses'),
       _badge('🤖 IA Adaptative'),
@@ -210,10 +229,10 @@ class _OnboardingScreenState extends State<OnboardingScreen>
     children: [
       Padding(
         padding: const EdgeInsets.only(left: 4, bottom: 8),
-        child: Row(children: [
-          const Text('✏️', style: TextStyle(fontSize: 16)),
-          const SizedBox(width: 6),
-          const Text('Ton prénom', style: TextStyle(color: Colors.white,
+        child: Row(children: const [
+          Text('✏️', style: TextStyle(fontSize: 16)),
+          SizedBox(width: 6),
+          Text('Ton prénom', style: TextStyle(color: Colors.white,
               fontSize: 15, fontWeight: FontWeight.bold)),
         ]),
       ),
@@ -264,10 +283,10 @@ class _OnboardingScreenState extends State<OnboardingScreen>
     children: [
       Padding(
         padding: const EdgeInsets.only(left: 4, bottom: 12),
-        child: Row(children: [
-          const Text('🎭', style: TextStyle(fontSize: 16)),
-          const SizedBox(width: 6),
-          const Text('Choisis ta mascotte', style: TextStyle(color: Colors.white,
+        child: Row(children: const [
+          Text('🎭', style: TextStyle(fontSize: 16)),
+          SizedBox(width: 6),
+          Text('Choisis ta mascotte', style: TextStyle(color: Colors.white,
               fontSize: 15, fontWeight: FontWeight.bold)),
         ]),
       ),
@@ -289,11 +308,12 @@ class _OnboardingScreenState extends State<OnboardingScreen>
           ),
           itemCount: _avatars.length,
           itemBuilder: (_, i) {
-            final em = _avatars[i];
+            final em  = _avatars[i];
             final sel = em == _avatar;
             return GestureDetector(
               onTap: () {
                 HapticFeedback.selectionClick();
+                SoundService().play(SoundEffect.pop);
                 setState(() => _avatar = em);
               },
               child: AnimatedContainer(
@@ -379,7 +399,7 @@ class _OnboardingScreenState extends State<OnboardingScreen>
   );
 }
 
-// ─── Fond étoilé ────────────────────────────────────────
+// ─── Fond étoilé ─────────────────────────────────────────
 class _OnboardingBg extends CustomPainter {
   final double t;
   const _OnboardingBg({required this.t});
