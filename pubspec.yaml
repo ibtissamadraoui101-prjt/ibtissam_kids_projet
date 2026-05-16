@@ -51,19 +51,20 @@ flutter:
   uses-material-design: true
 
   assets:
-    # ── Images ──────────────────────────────────
+    # ── Images îles (game content) ──────────────
     - assets/images/cp/
     - assets/images/ce1/
     - assets/images/ce2/
     - assets/images/cm1/
     - assets/images/cm2/
 
+    # ── Images UI (mascotes, boutons, backgrounds)
+    - assets/images/mascots/
+    - assets/images/buttons/
+    - assets/images/backgrounds/
+
     # ── Sons : effets ────────────────────────────
     - assets/sounds/sfx/
 
     # ── Sons : musique de fond ───────────────────
     - assets/sounds/music/
-
-    # ✅ CORRECTION ERREUR 1 : assets/sounds/words/ SUPPRIMÉ
-    # Ce dossier n'existe pas → erreur au démarrage
-    # À rajouter seulement quand le dossier sera créé avec de vrais fichiers
