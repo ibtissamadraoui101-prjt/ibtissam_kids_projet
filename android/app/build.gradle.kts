@@ -29,7 +29,7 @@ android {
     defaultConfig {
         applicationId = "com.example.linguakids_maroc"
         // ✅ minSdk 21 requis par : Firebase Auth, speech_to_text, flutter_tts
-        minSdk = 21
+        minSdk = flutter.minSdkVersion
         targetSdk = flutter.targetSdkVersion
         versionCode = flutter.versionCode
         versionName = flutter.versionName

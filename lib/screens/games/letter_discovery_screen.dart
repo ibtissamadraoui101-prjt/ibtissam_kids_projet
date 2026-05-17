@@ -1,632 +1,520 @@
 // lib/screens/games/letter_discovery_screen.dart
-// ═══════════════════════════════════════════════════════════
-// LinguaKids — Jeu 1 : Découverte de la Lettre
-// CORRIGÉ :
-//   • import 'letter_recognition_game.dart' → 'letter_recognition_screen.dart'
-//   • LetterRecognitionGame → LetterRecognitionScreen
-//   • LumiMood.celebrate ✅ (existe dans l'enum)
-// ═══════════════════════════════════════════════════════════
+// ════════════════════════════════════════════════════════════
+// JEU 1 CP — VOIR + ÉCOUTER
+// Données centralisées dans lib/data/letter_games_data.dart
+// ════════════════════════════════════════════════════════════
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import 'dart:math' as math;
 import '../../theme/app_theme.dart';
 import '../../widgets/lumi_mascot.dart';
 import '../../services/progress_service.dart';
 import '../../services/tts_service.dart';
 import '../../services/sound_service.dart';
-import '../../widgets/lk_widgets.dart';
-// ✅ CORRIGÉ : le fichier s'appelle letter_recognition_screen.dart
-// et la classe s'appelle LetterRecognitionScreen (pas LetterRecognitionGame)
-import 'letter_recognition_screen.dart';
+import '../../data/letter_games_data.dart';
+import 'letter_recognition_game_cp.dart';
 
-// ── Données pédagogiques CP Maroc ────────────────────────────
-class LetterData {
-  final String letter;
-  final String lowerCase;
-  final String exampleWord;
-  final String exampleEmoji;
-  final String arabicWord;
-  final Color  color;
-  final Color  dark;
-
-  const LetterData({
-    required this.letter,
-    required this.lowerCase,
-    required this.exampleWord,
-    required this.exampleEmoji,
-    required this.arabicWord,
-    required this.color,
-    required this.dark,
-  });
-}
-
-const kLetterDatabase = <String, LetterData>{
-  'A': LetterData(letter:'A', lowerCase:'a', exampleWord:'Avion',     exampleEmoji:'✈️', arabicWord:'طيارة',  color:Color(0xFFFFD93D), dark:Color(0xFFFFA000)),
-  'B': LetterData(letter:'B', lowerCase:'b', exampleWord:'Ballon',    exampleEmoji:'🎈', arabicWord:'بالون',  color:Color(0xFFFF8C9E), dark:Color(0xFFD4537E)),
-  'C': LetterData(letter:'C', lowerCase:'c', exampleWord:'Chat',      exampleEmoji:'🐱', arabicWord:'قطة',    color:Color(0xFF85DAFF), dark:Color(0xFF378ADD)),
-  'D': LetterData(letter:'D', lowerCase:'d', exampleWord:'Dindon',    exampleEmoji:'🦃', arabicWord:'ديك',    color:Color(0xFFA8E6CF), dark:Color(0xFF3DAD8A)),
-  'E': LetterData(letter:'E', lowerCase:'e', exampleWord:'Éléphant',  exampleEmoji:'🐘', arabicWord:'فيل',    color:Color(0xFFCECBF6), dark:Color(0xFF8B7FD4)),
-  'F': LetterData(letter:'F', lowerCase:'f', exampleWord:'Fleur',     exampleEmoji:'🌸', arabicWord:'وردة',   color:Color(0xFFFF9B7A), dark:Color(0xFFE07050)),
-  'G': LetterData(letter:'G', lowerCase:'g', exampleWord:'Grenouille',exampleEmoji:'🐸', arabicWord:'ضفدع',   color:Color(0xFF5DCAA5), dark:Color(0xFF3DAD8A)),
-  'H': LetterData(letter:'H', lowerCase:'h', exampleWord:'Hibou',     exampleEmoji:'🦉', arabicWord:'بومة',   color:Color(0xFFFFD93D), dark:Color(0xFFFFA000)),
-  'I': LetterData(letter:'I', lowerCase:'i', exampleWord:'Igloo',     exampleEmoji:'🏠', arabicWord:'جليد',   color:Color(0xFF85DAFF), dark:Color(0xFF378ADD)),
-  'J': LetterData(letter:'J', lowerCase:'j', exampleWord:'Jaguar',    exampleEmoji:'🐆', arabicWord:'جاغوار', color:Color(0xFFFF8C9E), dark:Color(0xFFD4537E)),
-  'K': LetterData(letter:'K', lowerCase:'k', exampleWord:'Koala',     exampleEmoji:'🐨', arabicWord:'كوالا',  color:Color(0xFFA8E6CF), dark:Color(0xFF3DAD8A)),
-  'L': LetterData(letter:'L', lowerCase:'l', exampleWord:'Lion',      exampleEmoji:'🦁', arabicWord:'أسد',    color:Color(0xFFFFD93D), dark:Color(0xFFFFA000)),
-  'M': LetterData(letter:'M', lowerCase:'m', exampleWord:'Maison',    exampleEmoji:'🏠', arabicWord:'دار',    color:Color(0xFFCECBF6), dark:Color(0xFF8B7FD4)),
-  'N': LetterData(letter:'N', lowerCase:'n', exampleWord:'Nuage',     exampleEmoji:'☁️', arabicWord:'سحابة',  color:Color(0xFF85DAFF), dark:Color(0xFF378ADD)),
-  'O': LetterData(letter:'O', lowerCase:'o', exampleWord:'Orange',    exampleEmoji:'🍊', arabicWord:'برتقالة',color:Color(0xFFFF9B7A), dark:Color(0xFFE07050)),
-  'P': LetterData(letter:'P', lowerCase:'p', exampleWord:'Poisson',   exampleEmoji:'🐟', arabicWord:'سمكة',   color:Color(0xFF5DCAA5), dark:Color(0xFF3DAD8A)),
-  'Q': LetterData(letter:'Q', lowerCase:'q', exampleWord:'Queue',     exampleEmoji:'🦊', arabicWord:'ذيل',    color:Color(0xFFFF8C9E), dark:Color(0xFFD4537E)),
-  'R': LetterData(letter:'R', lowerCase:'r', exampleWord:'Renard',    exampleEmoji:'🦊', arabicWord:'ثعلب',   color:Color(0xFFFFD93D), dark:Color(0xFFFFA000)),
-  'S': LetterData(letter:'S', lowerCase:'s', exampleWord:'Soleil',    exampleEmoji:'☀️', arabicWord:'شمس',    color:Color(0xFFFF9B7A), dark:Color(0xFFE07050)),
-  'T': LetterData(letter:'T', lowerCase:'t', exampleWord:'Tortue',    exampleEmoji:'🐢', arabicWord:'سلحفاة', color:Color(0xFFA8E6CF), dark:Color(0xFF3DAD8A)),
-  'U': LetterData(letter:'U', lowerCase:'u', exampleWord:'Ours',      exampleEmoji:'🐻', arabicWord:'دب',     color:Color(0xFFCECBF6), dark:Color(0xFF8B7FD4)),
-  'V': LetterData(letter:'V', lowerCase:'v', exampleWord:'Vache',     exampleEmoji:'🐄', arabicWord:'بقرة',   color:Color(0xFF85DAFF), dark:Color(0xFF378ADD)),
-  'W': LetterData(letter:'W', lowerCase:'w', exampleWord:'Wagon',     exampleEmoji:'🚃', arabicWord:'عربة',   color:Color(0xFFFF8C9E), dark:Color(0xFFD4537E)),
-  'X': LetterData(letter:'X', lowerCase:'x', exampleWord:'Xylophone', exampleEmoji:'🎹', arabicWord:'كسيلفون',color:Color(0xFFFFD93D), dark:Color(0xFFFFA000)),
-  'Y': LetterData(letter:'Y', lowerCase:'y', exampleWord:'Yaourt',    exampleEmoji:'🥛', arabicWord:'زبادي',  color:Color(0xFF5DCAA5), dark:Color(0xFF3DAD8A)),
-  'Z': LetterData(letter:'Z', lowerCase:'z', exampleWord:'Zèbre',     exampleEmoji:'🦓', arabicWord:'حمار وحشي',color:Color(0xFFCECBF6), dark:Color(0xFF8B7FD4)),
-};
-
+// ════════════════════════════════════════════════════════════
 class LetterDiscoveryScreen extends StatefulWidget {
-  final String       islandId;
+  final String islandId;
   final List<String> letters;
-  final int          dayNumber;
-
+  final int dayNumber;
   const LetterDiscoveryScreen({
     super.key,
     required this.islandId,
     required this.letters,
     required this.dayNumber,
   });
-
   @override
-  State<LetterDiscoveryScreen> createState() => _LetterDiscoveryScreenState();
+  State<LetterDiscoveryScreen> createState() => _State();
 }
 
-class _LetterDiscoveryScreenState extends State<LetterDiscoveryScreen>
+class _State extends State<LetterDiscoveryScreen>
     with TickerProviderStateMixin {
+  int _idx = 0;
+  int _taps = 0;
+  bool _showWord = false;
+  bool _showMin = false;
+  bool _done = false;
+  LumiMood _mood = LumiMood.guide;
 
-  int _currentLetterIdx = 0;
+  late AnimationController _bounceCtrl, _wordCtrl, _rippleCtrl, _floatCtrl;
+  late Animation<double> _bounce, _word, _ripple, _float;
 
-  late AnimationController _letterBounceCtrl;
-  late AnimationController _letterSpinCtrl;
-  late AnimationController _imagePopCtrl;
-  late AnimationController _tapRippleCtrl;
-  late AnimationController _lumiCtrl;
-  late AnimationController _particleCtrl;
-
-  late Animation<double> _letterBounce;
-  late Animation<double> _letterSpin;
-  late Animation<double> _imagePop;
-  late Animation<double> _tapRipple;
-  late Animation<double> _lumiFloat;
-  late Animation<double> _particleAnim;
-
-  bool     _showImage    = false;
-  bool     _tapped       = false;
-  bool     _showUppercase = true;
-  int      _tapCount     = 0;
-  LumiMood _lumiMood     = LumiMood.guide;
-
-  LetterData get _currentData =>
-    kLetterDatabase[widget.letters[_currentLetterIdx]] ??
-    const LetterData(letter:'A', lowerCase:'a', exampleWord:'Avion',
-      exampleEmoji:'✈️', arabicWord:'طيارة',
-      color: Color(0xFFFFD93D), dark: Color(0xFFFFA000));
+  LetterData get _d => kLetterDB[widget.letters[_idx]] ?? kLetterDB['A']!;
 
   @override
   void initState() {
     super.initState();
+    _bounceCtrl = AnimationController(
+        vsync: this, duration: const Duration(milliseconds: 600));
+    _wordCtrl = AnimationController(
+        vsync: this, duration: const Duration(milliseconds: 500));
+    _rippleCtrl = AnimationController(
+        vsync: this, duration: const Duration(milliseconds: 700));
+    _floatCtrl = AnimationController(
+        vsync: this, duration: const Duration(milliseconds: 1800))
+      ..repeat(reverse: true);
 
-    _letterBounceCtrl = AnimationController(vsync: this,
-        duration: const Duration(milliseconds: 700));
-    _letterSpinCtrl   = AnimationController(vsync: this,
-        duration: const Duration(seconds: 8))..repeat();
-    _imagePopCtrl     = AnimationController(vsync: this,
-        duration: const Duration(milliseconds: 500));
-    _tapRippleCtrl    = AnimationController(vsync: this,
-        duration: const Duration(milliseconds: 600));
-    _lumiCtrl         = AnimationController(vsync: this,
-        duration: const Duration(milliseconds: 1800))..repeat(reverse: true);
-    _particleCtrl     = AnimationController(vsync: this,
-        duration: const Duration(milliseconds: 1200));
+    _bounce = Tween(begin: 1.0, end: 1.22).animate(
+        CurvedAnimation(parent: _bounceCtrl, curve: Curves.elasticOut));
+    _word = Tween(begin: 0.0, end: 1.0)
+        .animate(CurvedAnimation(parent: _wordCtrl, curve: Curves.elasticOut));
+    _ripple = Tween(begin: 0.0, end: 1.0)
+        .animate(CurvedAnimation(parent: _rippleCtrl, curve: Curves.easeOut));
+    _float = Tween(begin: -6.0, end: 6.0)
+        .animate(CurvedAnimation(parent: _floatCtrl, curve: Curves.easeInOut));
 
-    _letterBounce = Tween<double>(begin: 1.0, end: 1.18).animate(
-        CurvedAnimation(parent: _letterBounceCtrl, curve: Curves.elasticOut));
-    _letterSpin   = CurvedAnimation(
-        parent: _letterSpinCtrl, curve: Curves.linear);
-    _imagePop     = Tween<double>(begin: 0.0, end: 1.0).animate(
-        CurvedAnimation(parent: _imagePopCtrl, curve: Curves.elasticOut));
-    _tapRipple    = Tween<double>(begin: 0.0, end: 1.0).animate(
-        CurvedAnimation(parent: _tapRippleCtrl, curve: Curves.easeOut));
-    _lumiFloat    = Tween<double>(begin: -5, end: 5).animate(
-        CurvedAnimation(parent: _lumiCtrl, curve: Curves.easeInOut));
-    _particleAnim = CurvedAnimation(
-        parent: _particleCtrl, curve: Curves.easeOut);
-
-    Future.delayed(const Duration(milliseconds: 600), _playCurrentLetter);
+    _start();
   }
 
   @override
   void dispose() {
-    _letterBounceCtrl.dispose();
-    _letterSpinCtrl.dispose();
-    _imagePopCtrl.dispose();
-    _tapRippleCtrl.dispose();
-    _lumiCtrl.dispose();
-    _particleCtrl.dispose();
+    _bounceCtrl.dispose();
+    _wordCtrl.dispose();
+    _rippleCtrl.dispose();
+    _floatCtrl.dispose();
     super.dispose();
   }
 
-  Future<void> _playCurrentLetter() async {
-    final data = _currentData;
-    _letterBounceCtrl.forward(from: 0);
-    await TtsService().speak(data.letter);
-    await Future.delayed(const Duration(milliseconds: 400));
-    await TtsService().speak(data.exampleWord);
-    setState(() => _showImage = true);
-    _imagePopCtrl.forward(from: 0);
+  Future<void> _start() async {
+    setState(() {
+      _taps = 0;
+      _showWord = false;
+      _showMin = false;
+      _done = false;
+      _mood = LumiMood.guide;
+    });
+    _wordCtrl.reset();
+    _bounceCtrl.forward(from: 0);
+    await Future.delayed(const Duration(milliseconds: 300));
+    await TtsService().speak(_d.letter);
+    await Future.delayed(const Duration(milliseconds: 500));
+    await TtsService().speak('${_d.letter} comme ${_d.word}');
+    setState(() => _showWord = true);
+    _wordCtrl.forward(from: 0);
   }
 
-  Future<void> _onLetterTap() async {
-    if (_tapped && _tapCount >= 3) return;
+  Future<void> _onTap() async {
+    if (_done) return;
     HapticFeedback.lightImpact();
-
-    setState(() {
-      _tapCount++;
-      _tapped        = true;
-      _showUppercase = !_showUppercase;
-      _lumiMood      = LumiMood.celebrate; // ✅ existe dans l'enum
-    });
-
-    _letterBounceCtrl.forward(from: 0);
-    _tapRippleCtrl.forward(from: 0);
+    _taps++;
+    _bounceCtrl.forward(from: 0);
+    _rippleCtrl.forward(from: 0);
     SoundService().play(SoundEffect.correct);
-    await TtsService().speak(_currentData.letter);
-
-    if (_tapCount >= 3) {
-      _particleCtrl.forward(from: 0);
-      await Future.delayed(const Duration(milliseconds: 800));
-
-      if (_currentLetterIdx + 1 < widget.letters.length) {
-        setState(() {
-          _currentLetterIdx++;
-          _tapCount      = 0;
-          _tapped        = false;
-          _showImage     = false;
-          _showUppercase = true;
-          _lumiMood      = LumiMood.guide;
-        });
-        _imagePopCtrl.reset();
-        _letterBounceCtrl.reset();
-        await Future.delayed(const Duration(milliseconds: 300));
-        _playCurrentLetter();
+    setState(() {
+      _showMin = !_showMin;
+      _mood = _taps >= 3 ? LumiMood.celebrate : LumiMood.happy;
+    });
+    await TtsService().speak(_d.letter);
+    if (_taps >= 3) {
+      setState(() => _done = true);
+      await Future.delayed(const Duration(milliseconds: 900));
+      if (_idx + 1 < widget.letters.length) {
+        setState(() => _idx++);
+        _start();
       } else {
-        await _recordAndNext();
+        _finish();
       }
-    } else {
-      setState(() => _lumiMood = LumiMood.happy);
     }
   }
 
-  Future<void> _recordAndNext() async {
+  Future<void> _finish() async {
     await ProgressService().recordScore(
-      levelId:  widget.islandId,
+      levelId: widget.islandId,
       gameType: 'discovery_${widget.dayNumber}',
-      score:    widget.letters.length,
+      score: widget.letters.length,
       maxScore: widget.letters.length,
     );
     if (!mounted) return;
-
-    // ✅ CORRIGÉ : LetterRecognitionScreen (pas LetterRecognitionGame)
-    // islandId et theme sont requis par LetterRecognitionScreen
+    // ✅ Récupère le thème de l'île
+    final theme = IslandTheme.all.firstWhere((t) => t.id == widget.islandId,
+        orElse: () => IslandTheme.all[0]);
+    // ✅ Navigue vers LetterRecognitionGameCP (jeu 2)
     Navigator.pushReplacement(
-      context,
-      PageRouteBuilder(
-        pageBuilder: (_, a, __) => LetterRecognitionScreen(
-          islandId:  widget.islandId,
-          // LetterRecognitionScreen utilise IslandTheme depuis app_theme.dart
-          // On prend le premier thème disponible correspondant à l'île
-          theme: _themeForIsland(widget.islandId),
-        ),
-        transitionsBuilder: (_, a, __, child) =>
-            FadeTransition(opacity: a, child: child),
-      ),
-    );
-  }
-
-  /// Récupère l'IslandTheme correspondant à l'islandId
-  IslandTheme _themeForIsland(String islandId) {
-    final idx = IslandTheme.all.indexWhere((t) => t.id == islandId);
-    if (idx >= 0) return IslandTheme.all[idx];
-    return IslandTheme.all[0]; // fallback: première île
+        context,
+        PageRouteBuilder(
+          pageBuilder: (_, a, __) => LetterRecognitionGameCP(
+            islandId: widget.islandId,
+            letters: widget.letters,
+            dayNumber: widget.dayNumber,
+            theme: theme,
+          ),
+          transitionsBuilder: (_, a, __, child) =>
+              FadeTransition(opacity: a, child: child),
+        ));
   }
 
   @override
-  Widget build(BuildContext context) {
-    final data = _currentData;
+  Widget build(BuildContext ctx) {
+    final d = _d;
     return Scaffold(
       body: Container(
         decoration: BoxDecoration(
           gradient: LinearGradient(
-            begin: Alignment.topCenter, end: Alignment.bottomCenter,
+            begin: Alignment.topCenter,
+            end: Alignment.bottomCenter,
             colors: [
-              data.color.withOpacity(0.9),
-              data.dark.withOpacity(0.7),
-              Colors.white,
-              const Color(0xFFF0FFF8),
+              d.color.withOpacity(0.95),
+              d.dark.withOpacity(0.55),
+              Colors.white
             ],
-            stops: const [0.0, 0.25, 0.55, 1.0],
+            stops: const [0, 0.35, 1],
           ),
         ),
         child: SafeArea(
-          child: Column(children: [
-            _buildTopBar(data),
-            Expanded(
-              child: Stack(alignment: Alignment.center, children: [
-                _buildBackgroundCircles(data),
-                Column(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: [
-                    _buildLetterDisplay(data),
-                    const SizedBox(height: 24),
-                    if (_showImage) _buildExampleImage(data),
-                    const SizedBox(height: 24),
-                    _buildTapInstruction(data),
-                    const SizedBox(height: 16),
-                    _buildTapDots(),
-                  ],
-                ),
-                if (_tapCount >= 3)
-                  AnimatedBuilder(
-                    animation: _particleAnim,
-                    builder: (_, __) => _ParticlesBurst(
-                        progress: _particleAnim.value, color: data.color),
-                  ),
-              ]),
-            ),
-            _buildLumiBar(data),
-          ]),
-        ),
+            child: Column(children: [
+          _topBar(d),
+          Expanded(
+              child: SingleChildScrollView(
+            physics: const BouncingScrollPhysics(),
+            child: Column(children: [
+              const SizedBox(height: 16),
+              _letterCircle(d),
+              const SizedBox(height: 20),
+              if (_showWord) _wordCard(d),
+              const SizedBox(height: 20),
+              _tapBtn(d),
+              const SizedBox(height: 12),
+              _dots(),
+              const SizedBox(height: 20),
+            ]),
+          )),
+          _lumiBar(d),
+        ])),
       ),
     );
   }
 
-  Widget _buildTopBar(LetterData data) {
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(16, 10, 16, 0),
-      child: Row(children: [
-        GestureDetector(
-          onTap: () => Navigator.pop(context),
-          child: Container(
-            width: 36, height: 36,
-            decoration: BoxDecoration(
-              color: Colors.white.withOpacity(0.7),
-              borderRadius: BorderRadius.circular(12),
-              border: Border.all(color: Colors.white.withOpacity(0.9), width: 2)),
-            child: Icon(Icons.close_rounded, color: data.dark, size: 20),
-          ),
-        ),
-        const Spacer(),
-        Row(children: List.generate(widget.letters.length, (i) {
-          final done = i < _currentLetterIdx;
-          final cur  = i == _currentLetterIdx;
-          return Container(
-            margin: const EdgeInsets.symmetric(horizontal: 4),
-            width:  cur ? 36 : 28,
-            height: cur ? 36 : 28,
-            decoration: BoxDecoration(
-              shape: BoxShape.circle,
-              color: done ? const Color(0xFF5DCAA5)
-                   : cur  ? data.color
-                   : Colors.white.withOpacity(0.35),
-              border: Border.all(
-                color: done ? const Color(0xFF3DAD8A)
-                     : cur  ? data.dark
-                     : Colors.white.withOpacity(0.5),
-                width: cur ? 2.5 : 2),
-              boxShadow: cur ? [BoxShadow(
-                  color: data.color.withOpacity(0.5), blurRadius: 10)] : [],
-            ),
-            child: Center(child: Text(
-              done ? '⭐' : widget.letters[i],
-              style: TextStyle(
-                fontSize: cur ? 18 : 14, fontWeight: FontWeight.w900,
-                color: cur ? data.dark : Colors.white),
-            )),
-          );
-        })),
-        const Spacer(),
-        Container(
-          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 5),
-          decoration: BoxDecoration(
-            color: Colors.white.withOpacity(0.8),
-            borderRadius: BorderRadius.circular(14),
-            border: Border.all(color: data.dark, width: 2)),
-          child: Text('👂 Écoute',
-            style: TextStyle(fontSize: 11, fontWeight: FontWeight.w800,
-                color: data.dark)),
-        ),
-      ]),
-    );
-  }
-
-  Widget _buildBackgroundCircles(LetterData data) {
-    return Positioned.fill(
-      child: CustomPaint(painter: _BgCirclesPainter(color: data.color)),
-    );
-  }
-
-  Widget _buildLetterDisplay(LetterData data) {
-    return AnimatedBuilder(
-      animation: Listenable.merge([_letterBounce, _tapRipple]),
-      builder: (_, __) {
-        return Stack(alignment: Alignment.center, children: [
-          if (_tapped)
-            Transform.scale(
-              scale: 1 + _tapRipple.value * 0.8,
-              child: Container(
-                width: 160, height: 160,
-                decoration: BoxDecoration(
+  Widget _topBar(LetterData d) => Padding(
+        padding: const EdgeInsets.fromLTRB(16, 10, 16, 0),
+        child: Row(children: [
+          _iconBtn(Icons.close_rounded, d.dark, () => Navigator.pop(context)),
+          const Spacer(),
+          Row(
+              children: List.generate(widget.letters.length, (i) {
+            final done = i < _idx;
+            final cur = i == _idx;
+            return AnimatedContainer(
+              duration: const Duration(milliseconds: 300),
+              margin: const EdgeInsets.symmetric(horizontal: 4),
+              width: cur ? 40 : 30,
+              height: cur ? 40 : 30,
+              decoration: BoxDecoration(
                   shape: BoxShape.circle,
-                  color: data.color.withOpacity(0.25 * (1 - _tapRipple.value)),
-                ),
-              ),
-            ),
-          Container(
-            width: 140, height: 140,
-            decoration: BoxDecoration(
-              shape: BoxShape.circle,
-              gradient: RadialGradient(
-                  colors: [Colors.white, data.color.withOpacity(0.3)]),
-              border: Border.all(color: data.dark, width: 3.5),
-              boxShadow: [
-                BoxShadow(color: data.color.withOpacity(0.5),
-                    blurRadius: 24, spreadRadius: 4),
-                BoxShadow(color: Colors.white.withOpacity(0.8),
-                    blurRadius: 8, spreadRadius: -2),
-              ],
-            ),
-          ),
-          GestureDetector(
-            onTap: _onLetterTap,
-            child: Transform.scale(
-              scale: _letterBounce.value,
-              child: Column(mainAxisSize: MainAxisSize.min, children: [
-                Text(
-                  _showUppercase ? data.letter : data.lowerCase,
-                  style: TextStyle(
-                    fontSize: 80, fontWeight: FontWeight.w900,
-                    color: data.dark,
-                    shadows: [Shadow(color: data.dark.withOpacity(0.3),
-                        blurRadius: 8, offset: const Offset(0, 4))],
-                  ),
-                ),
-                Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 2),
+                  color: done
+                      ? const Color(0xFF5DCAA5)
+                      : cur
+                          ? Colors.white
+                          : Colors.white.withOpacity(0.35),
+                  border: Border.all(
+                      color: done
+                          ? const Color(0xFF3DAD8A)
+                          : cur
+                              ? d.dark
+                              : Colors.white.withOpacity(0.5),
+                      width: 2.5),
+                  boxShadow: cur
+                      ? [
+                          BoxShadow(
+                              color: Colors.white.withOpacity(0.5),
+                              blurRadius: 10)
+                        ]
+                      : []),
+              child: Center(
+                  child: done
+                      ? const Icon(Icons.star_rounded,
+                          color: Colors.white, size: 18)
+                      : Text(widget.letters[i],
+                          style: TextStyle(
+                              fontSize: cur ? 20 : 15,
+                              fontWeight: FontWeight.w900,
+                              color: cur ? d.dark : Colors.white))),
+            );
+          })),
+          const Spacer(),
+          _iconBtn(Icons.volume_up_rounded, d.dark, () async {
+            await TtsService().speak(d.letter);
+            await Future.delayed(const Duration(milliseconds: 400));
+            await TtsService().speak(d.word);
+          }),
+        ]),
+      );
+
+  Widget _iconBtn(IconData ic, Color col, VoidCallback onTap) =>
+      GestureDetector(
+          onTap: onTap,
+          child: Container(
+              width: 36,
+              height: 36,
+              decoration: BoxDecoration(
+                  color: Colors.white.withOpacity(0.75),
+                  borderRadius: BorderRadius.circular(12),
+                  border: Border.all(color: Colors.white, width: 2)),
+              child: Icon(ic, color: col, size: 20)));
+
+  Widget _letterCircle(LetterData d) => AnimatedBuilder(
+        animation: Listenable.merge([_bounce, _ripple]),
+        builder: (_, __) => Stack(alignment: Alignment.center, children: [
+          Transform.scale(
+              scale: 1 + _ripple.value * 0.6,
+              child: Container(
+                  width: 160,
+                  height: 160,
                   decoration: BoxDecoration(
-                    color: data.color,
-                    borderRadius: BorderRadius.circular(10),
-                    border: Border.all(color: data.dark, width: 1.5)),
-                  child: Text(
-                    _showUppercase ? 'Majuscule' : 'Minuscule',
-                    style: const TextStyle(fontSize: 9,
-                        fontWeight: FontWeight.w800, color: Colors.white)),
-                ),
+                      shape: BoxShape.circle,
+                      color: Colors.white
+                          .withOpacity(0.18 * (1 - _ripple.value))))),
+          GestureDetector(
+              onTap: _onTap,
+              child: Transform.scale(
+                  scale: _bounce.value,
+                  child: Container(
+                      width: 150,
+                      height: 150,
+                      decoration: BoxDecoration(
+                          shape: BoxShape.circle,
+                          color: Colors.white,
+                          border: Border.all(color: d.dark, width: 4),
+                          boxShadow: [
+                            BoxShadow(
+                                color: d.color.withOpacity(0.5),
+                                blurRadius: 28,
+                                spreadRadius: 4)
+                          ]),
+                      child: Stack(alignment: Alignment.center, children: [
+                        ClipOval(
+                            child: Image.asset(d.imageAsset,
+                                width: 110,
+                                height: 110,
+                                fit: BoxFit.contain,
+                                errorBuilder: (_, __, ___) => Text(
+                                    _showMin ? d.lowercase : d.letter,
+                                    style: TextStyle(
+                                        fontSize: 72,
+                                        fontWeight: FontWeight.w900,
+                                        color: d.dark)))),
+                        Positioned(
+                            bottom: 8,
+                            child: Container(
+                                padding: const EdgeInsets.symmetric(
+                                    horizontal: 10, vertical: 2),
+                                decoration: BoxDecoration(
+                                    color: d.color,
+                                    borderRadius: BorderRadius.circular(10),
+                                    border:
+                                        Border.all(color: d.dark, width: 1.5)),
+                                child: Text(_showMin ? d.lowercase : d.letter,
+                                    style: const TextStyle(
+                                        fontSize: 14,
+                                        fontWeight: FontWeight.w900,
+                                        color: Colors.white)))),
+                        if (_done)
+                          Container(
+                              width: 150,
+                              height: 150,
+                              decoration: BoxDecoration(
+                                  shape: BoxShape.circle,
+                                  color: const Color(0xFF5DCAA5)
+                                      .withOpacity(0.88)),
+                              child: const Center(
+                                  child: Text('⭐',
+                                      style: TextStyle(fontSize: 64)))),
+                      ])))),
+        ]),
+      );
+
+  Widget _wordCard(LetterData d) => ScaleTransition(
+        scale: _word,
+        child: Container(
+          margin: const EdgeInsets.symmetric(horizontal: 28),
+          padding: const EdgeInsets.all(16),
+          decoration: BoxDecoration(
+              color: Colors.white,
+              borderRadius: BorderRadius.circular(24),
+              border: Border.all(color: d.color, width: 2.5),
+              boxShadow: [
+                BoxShadow(
+                    color: d.color.withOpacity(0.3),
+                    blurRadius: 18,
+                    offset: const Offset(0, 6))
               ]),
-            ),
-          ),
-        ]);
-      },
-    );
-  }
-
-  Widget _buildExampleImage(LetterData data) {
-    return ScaleTransition(
-      scale: _imagePop,
-      child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 14),
-        decoration: BoxDecoration(
-          color: Colors.white,
-          borderRadius: BorderRadius.circular(24),
-          border: Border.all(color: data.color, width: 2.5),
-          boxShadow: [BoxShadow(
-              color: data.color.withOpacity(0.3),
-              blurRadius: 16, offset: const Offset(0, 5))],
-        ),
-        child: Row(mainAxisSize: MainAxisSize.min, children: [
-          Text(data.exampleEmoji, style: const TextStyle(fontSize: 44)),
-          const SizedBox(width: 14),
-          Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-            Text(data.exampleWord,
-              style: TextStyle(fontSize: 22, fontWeight: FontWeight.w900,
-                  color: data.dark)),
-            const SizedBox(height: 2),
-            Text(data.arabicWord,
-              style: const TextStyle(fontSize: 14,
-                  color: LKColors.textMedium, fontWeight: FontWeight.w600)),
+          child: Row(children: [
+            Container(
+                width: 80,
+                height: 80,
+                decoration: BoxDecoration(
+                    color: d.color.withOpacity(0.12),
+                    borderRadius: BorderRadius.circular(16),
+                    border: Border.all(
+                        color: d.color.withOpacity(0.5), width: 1.5)),
+                child: ClipRRect(
+                    borderRadius: BorderRadius.circular(14),
+                    child: Image.asset(d.wordAsset,
+                        fit: BoxFit.contain,
+                        errorBuilder: (_, __, ___) => Center(
+                            child: Text(d.letter,
+                                style: TextStyle(
+                                    fontSize: 44,
+                                    fontWeight: FontWeight.w900,
+                                    color: d.dark)))))),
+            const SizedBox(width: 16),
+            Expanded(
+                child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                  RichText(
+                      text: TextSpan(children: [
+                    TextSpan(
+                        text: d.letter,
+                        style: TextStyle(
+                            fontSize: 28,
+                            fontWeight: FontWeight.w900,
+                            color: d.dark)),
+                    TextSpan(
+                        text: d.word.length > 1
+                            ? d.word.substring(1).toLowerCase()
+                            : '',
+                        style: TextStyle(
+                            fontSize: 22,
+                            fontWeight: FontWeight.w700,
+                            color: Colors.grey.shade600)),
+                  ])),
+                  const SizedBox(height: 4),
+                  Text(d.wordArabic,
+                      style: const TextStyle(
+                          fontSize: 14,
+                          color: Color(0xFF9B9B98),
+                          fontWeight: FontWeight.w600)),
+                  const SizedBox(height: 8),
+                  GestureDetector(
+                      onTap: () =>
+                          TtsService().speak('${d.letter} comme ${d.word}'),
+                      child: Container(
+                          padding: const EdgeInsets.symmetric(
+                              horizontal: 12, vertical: 6),
+                          decoration: BoxDecoration(
+                              color: d.color.withOpacity(0.15),
+                              borderRadius: BorderRadius.circular(12),
+                              border: Border.all(color: d.color, width: 1.5)),
+                          child: Row(mainAxisSize: MainAxisSize.min, children: [
+                            Icon(Icons.volume_up_rounded,
+                                color: d.dark, size: 16),
+                            const SizedBox(width: 4),
+                            Text('Écouter',
+                                style: TextStyle(
+                                    fontSize: 11,
+                                    fontWeight: FontWeight.w800,
+                                    color: d.dark)),
+                          ]))),
+                ])),
           ]),
-        ]),
-      ),
-    );
-  }
-
-  Widget _buildTapInstruction(LetterData data) {
-    return GestureDetector(
-      onTap: _onLetterTap,
-      child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 28, vertical: 14),
-        decoration: BoxDecoration(
-          gradient: LinearGradient(colors: [data.color, data.dark]),
-          borderRadius: BorderRadius.circular(26),
-          border: Border.all(color: Colors.white.withOpacity(0.5), width: 2),
-          boxShadow: [BoxShadow(
-              color: data.dark.withOpacity(0.4),
-              blurRadius: 14, offset: const Offset(0, 5))],
         ),
-        child: Row(mainAxisSize: MainAxisSize.min, children: [
-          const Text('👆', style: TextStyle(fontSize: 22)),
-          const SizedBox(width: 8),
-          Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-            const Text('Tape et répète !',
-              style: TextStyle(fontSize: 13, fontWeight: FontWeight.w900,
-                  color: Colors.white)),
-            Text('${3 - _tapCount.clamp(0, 3)} fois encore',
-              style: TextStyle(fontSize: 10,
-                  color: Colors.white.withOpacity(0.8),
-                  fontWeight: FontWeight.w600)),
-          ]),
-          const SizedBox(width: 8),
-          const Text('🔊', style: TextStyle(fontSize: 20)),
-        ]),
-      ),
-    );
-  }
+      );
 
-  Widget _buildTapDots() {
-    return Row(
+  Widget _tapBtn(LetterData d) => GestureDetector(
+        onTap: _onTap,
+        child: Container(
+          padding: const EdgeInsets.symmetric(horizontal: 32, vertical: 16),
+          decoration: BoxDecoration(
+              gradient: LinearGradient(colors: [d.color, d.dark]),
+              borderRadius: BorderRadius.circular(28),
+              border:
+                  Border.all(color: Colors.white.withOpacity(0.5), width: 2),
+              boxShadow: [
+                BoxShadow(
+                    color: d.dark.withOpacity(0.4),
+                    blurRadius: 16,
+                    offset: const Offset(0, 6))
+              ]),
+          child: Row(mainAxisSize: MainAxisSize.min, children: [
+            const Text('👆', style: TextStyle(fontSize: 24)),
+            const SizedBox(width: 10),
+            Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+              const Text('Tape et répète !',
+                  style: TextStyle(
+                      fontSize: 15,
+                      fontWeight: FontWeight.w900,
+                      color: Colors.white)),
+              Text('${3 - _taps.clamp(0, 3)} fois encore',
+                  style: TextStyle(
+                      fontSize: 11, color: Colors.white.withOpacity(0.85))),
+            ]),
+            const SizedBox(width: 10),
+            const Text('🔊', style: TextStyle(fontSize: 22)),
+          ]),
+        ),
+      );
+
+  Widget _dots() => Row(
       mainAxisSize: MainAxisSize.min,
       children: List.generate(3, (i) {
-        final done = i < _tapCount;
+        final done = i < _taps;
         return AnimatedContainer(
-          duration: const Duration(milliseconds: 300),
-          margin: const EdgeInsets.symmetric(horizontal: 5),
-          width:  done ? 18 : 12,
-          height: done ? 18 : 12,
+          duration: const Duration(milliseconds: 250),
+          margin: const EdgeInsets.symmetric(horizontal: 6),
+          width: done ? 20 : 13,
+          height: done ? 20 : 13,
           decoration: BoxDecoration(
-            shape: BoxShape.circle,
-            color: done
-                ? const Color(0xFF5DCAA5)
-                : Colors.white.withOpacity(0.4),
-            border: Border.all(
+              shape: BoxShape.circle,
               color: done
-                  ? const Color(0xFF3DAD8A)
-                  : Colors.white.withOpacity(0.6),
-              width: 2),
-            boxShadow: done ? [BoxShadow(
-                color: const Color(0xFF5DCAA5).withOpacity(0.5),
-                blurRadius: 8)] : [],
-          ),
+                  ? const Color(0xFF5DCAA5)
+                  : Colors.white.withOpacity(0.45),
+              border: Border.all(
+                  color: done
+                      ? const Color(0xFF3DAD8A)
+                      : Colors.white.withOpacity(0.7),
+                  width: 2),
+              boxShadow: done
+                  ? [
+                      BoxShadow(
+                          color: const Color(0xFF5DCAA5).withOpacity(0.5),
+                          blurRadius: 8)
+                    ]
+                  : []),
           child: done
-            ? const Center(child: Text('✓',
-                style: TextStyle(fontSize: 10, color: Colors.white,
-                    fontWeight: FontWeight.w900)))
-            : null,
+              ? const Center(
+                  child:
+                      Icon(Icons.check_rounded, color: Colors.white, size: 12))
+              : null,
         );
-      }),
-    );
-  }
+      }));
 
-  Widget _buildLumiBar(LetterData data) {
-    return AnimatedBuilder(
-      animation: _lumiFloat,
-      builder: (_, __) => Transform.translate(
-        offset: Offset(0, _lumiFloat.value),
-        child: Container(
-          margin: const EdgeInsets.fromLTRB(16, 0, 16, 12),
-          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
-          decoration: BoxDecoration(
-            color: Colors.white.withOpacity(0.92),
-            borderRadius: BorderRadius.circular(18),
-            border: Border.all(color: data.color, width: 2.5),
-            boxShadow: [BoxShadow(
-                color: Colors.black.withOpacity(0.10),
-                blurRadius: 8, offset: const Offset(0, 3))],
+  Widget _lumiBar(LetterData d) => AnimatedBuilder(
+        animation: _float,
+        builder: (_, __) => Transform.translate(
+          offset: Offset(0, _float.value),
+          child: Container(
+            margin: const EdgeInsets.fromLTRB(16, 0, 16, 12),
+            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+            decoration: BoxDecoration(
+                color: Colors.white.withOpacity(0.93),
+                borderRadius: BorderRadius.circular(18),
+                border: Border.all(color: d.color, width: 2.5),
+                boxShadow: [
+                  BoxShadow(
+                      color: Colors.black.withOpacity(0.10),
+                      blurRadius: 8,
+                      offset: const Offset(0, 3))
+                ]),
+            child: Row(children: [
+              LumiMascot(mood: _mood, size: 40),
+              const SizedBox(width: 10),
+              Expanded(
+                  child: Text(
+                      _taps == 0
+                          ? '👁 Regarde ! Tape la lettre pour la répéter !'
+                          : _taps == 1
+                              ? '👏 Super ! Encore 2 fois !'
+                              : _taps == 2
+                                  ? '🔥 Presque ! Encore une fois !'
+                                  : '🎉 Excellent ! Tu connais la lettre ${d.letter} !',
+                      style: TextStyle(
+                          fontSize: 11,
+                          fontWeight: FontWeight.w700,
+                          color: d.dark))),
+            ]),
           ),
-          child: Row(children: [
-            LumiMascot(mood: _lumiMood, size: 38),
-            const SizedBox(width: 10),
-            Expanded(child: Text(
-              _tapCount == 0
-                ? '👂 Écoute bien ! Tape la lettre pour répéter !'
-                : _tapCount == 1
-                ? '👏 Super ! Encore 2 fois !'
-                : _tapCount == 2
-                ? '🔥 Presque ! Encore une fois !'
-                : '🎉 Parfait ! Tu connais la lettre ${data.letter} !',
-              style: TextStyle(fontSize: 11, fontWeight: FontWeight.w700,
-                  color: data.dark),
-            )),
-          ]),
         ),
-      ),
-    );
-  }
-}
-
-// ── Background circles ────────────────────────────────────────
-class _BgCirclesPainter extends CustomPainter {
-  final Color color;
-  const _BgCirclesPainter({required this.color});
-  @override
-  void paint(Canvas canvas, Size size) {
-    final p = Paint()..color = color.withOpacity(0.08);
-    canvas.drawCircle(Offset(size.width * 0.85, size.height * 0.12), 80, p);
-    canvas.drawCircle(Offset(size.width * 0.10, size.height * 0.80), 60, p);
-    canvas.drawCircle(Offset(size.width * 0.92, size.height * 0.85), 45, p);
-    canvas.drawCircle(Offset(size.width * 0.05, size.height * 0.20), 35, p);
-  }
-  @override
-  bool shouldRepaint(_BgCirclesPainter o) => o.color != color;
-}
-
-// ── Particles burst ──────────────────────────────────────────
-class _ParticlesBurst extends StatelessWidget {
-  final double progress;
-  final Color  color;
-  const _ParticlesBurst({required this.progress, required this.color});
-
-  @override
-  Widget build(BuildContext context) {
-    return CustomPaint(
-      painter: _ParticlesPainter(progress: progress, color: color),
-      size: const Size(300, 300),
-    );
-  }
-}
-
-class _ParticlesPainter extends CustomPainter {
-  final double progress;
-  final Color  color;
-  const _ParticlesPainter({required this.progress, required this.color});
-
-  @override
-  void paint(Canvas canvas, Size size) {
-    final cx  = size.width  / 2;
-    final cy  = size.height / 2;
-    final rng = math.Random(42);
-
-    for (int i = 0; i < 18; i++) {
-      final angle = rng.nextDouble() * 2 * math.pi;
-      final dist  = progress * 120;
-      canvas.drawCircle(
-        Offset(cx + dist * math.cos(angle), cy + dist * math.sin(angle)),
-        (3 + rng.nextDouble() * 5) * (1 - progress * 0.5),
-        Paint()..color = color.withOpacity((1 - progress) * 0.85),
       );
-    }
-
-    final tp     = TextPainter(textDirection: TextDirection.ltr);
-    final stars  = ['⭐', '✨', '🌟'];
-    final rng2   = math.Random(42);
-    for (int i = 0; i < 5; i++) {
-      final angle = rng2.nextDouble() * 2 * math.pi;
-      final dist  = progress * 90;
-      tp.text = TextSpan(
-        text: stars[i % stars.length],
-        style: TextStyle(fontSize: 16,
-            color: Colors.white.withOpacity((1 - progress) * 0.9)));
-      tp.layout();
-      tp.paint(canvas, Offset(
-        cx + dist * math.cos(angle) - 8,
-        cy + dist * math.sin(angle) - 8,
-      ));
-    }
-  }
-
-  @override
-  bool shouldRepaint(_ParticlesPainter o) => o.progress != progress;
 }
