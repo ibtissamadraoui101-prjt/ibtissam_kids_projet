@@ -59,7 +59,7 @@ flutter:
     - assets/images/cm2/
 
     # ── Images UI (mascotes, boutons, backgrounds)
-    - assets/images/mascots/
+    - assets/images/mascots/kenney_monster-builder-pack/PNG/Default/
     - assets/images/buttons/
     - assets/images/backgrounds/
 
